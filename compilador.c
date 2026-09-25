@@ -97,9 +97,111 @@ Token obterToken() {
         // TODO: Implementar lógica para Números (TOKEN_NUM_INT, TOKEN_NUM_FLOAT)
         
         // TODO: Implementar lógica para Identificadores e Palavras Reservadas (TOKEN_ID, TOKEN_KEYWORD)
+        // ==========================================================
+        // 3. MÁQUINA DE ESTADOS: RECONHECIMENTO DE TOKENS
+        // ==========================================================
+        
+        // Reconhecimento de Identificadores e Palavras Reservadas
+        // A transição inicial exige que o lexema comece obrigatoriamente por uma letra.
+        if (isalpha(c)) {
+            char lexema[100]; // Buffer temporário para armazenar a palavra
+            int i = 0;
+            
+            // O estado avança e consome os próximos caracteres enquanto forem letras, dígitos ou sublinhados
+            while (isalpha(buffer[indice_leitura]) || isdigit(buffer[indice_leitura]) || buffer[indice_leitura] == '_') {
+                if (i < 99) { // Proteção contra overflow do buffer
+                    lexema[i++] = buffer[indice_leitura];
+                }
+                indice_leitura++;
+            }
+            lexema[i] = '\0'; // Finaliza a string do lexema
+            
+            // NOTA SOBRE O RETRACT: Como a leitura avalia diretamente o índice do array (buffer[indice_leitura]),
+            // quando o laço while falha (encontrando o caractere "other"), o 'indice_leitura' fica 
+            // perfeitamente posicionado nesse caractere limitador. Isto simula nativamente a operação retract()
+            
+            // Classificação: Prioridade das Palavras Reservadas sobre Identificadores comuns
+            if (strcmp(lexema, "algoritmo") == 0 || strcmp(lexema, "var") == 0 || 
+                strcmp(lexema, "inicio") == 0 || strcmp(lexema, "fimalgoritmo") == 0 ||
+                strcmp(lexema, "se") == 0 || strcmp(lexema, "entao") == 0 || 
+                strcmp(lexema, "senao") == 0 || strcmp(lexema, "fimse") == 0 ||
+                strcmp(lexema, "escreva") == 0 || strcmp(lexema, "escreval") == 0 || 
+                strcmp(lexema, "leia") == 0 || strcmp(lexema, "enquanto") == 0 || 
+                strcmp(lexema, "faca") == 0 || strcmp(lexema, "fimenquanto") == 0 ||
+                strcmp(lexema, "para") == 0 || strcmp(lexema, "de") == 0 || 
+                strcmp(lexema, "ate") == 0 || strcmp(lexema, "passo") == 0 || 
+                strcmp(lexema, "fimpara") == 0 || strcmp(lexema, "inteiro") == 0 || 
+                strcmp(lexema, "real") == 0 || strcmp(lexema, "caractere") == 0 || 
+                strcmp(lexema, "logico") == 0 || strcmp(lexema, "vetor") == 0 ||
+                strcmp(lexema, "procedimento") == 0 || strcmp(lexema, "fimprocedimento") == 0 ||
+                strcmp(lexema, "funcao") == 0 || strcmp(lexema, "retorne") == 0 ||
+                strcmp(lexema, "verdadeiro") == 0 || strcmp(lexema, "falso") == 0) {
+                
+                token.type = TOKEN_KEYWORD;
+            } else {
+                token.type = TOKEN_ID;
+            }
+            
+            return token;
+        }
 
         // TODO: Implementar lógica para Operadores Relacionais (TOKEN_OP_REL) e Atribuição (<-)
+        // ==========================================================
+        // LÓGICA PARA OPERADORES RELACIONAIS E ATRIBUIÇÃO
+        // ==========================================================
+        
+        if (c == '>') {
 
+            if (buffer[indice_leitura + 1] == '=') {
+                // Maior ou igual: >=[cite: 6]
+                token.type = TOKEN_OP_REL;
+                token.attribute.op_code = OP_GE;
+                indice_leitura += 2;
+                return token;
+            } else {
+                // Maior: >[cite: 6]
+                token.type = TOKEN_OP_REL;
+                token.attribute.op_code = OP_GT;
+                indice_leitura++;
+                return token;
+            }
+
+        } else if (c == '<') {
+            
+            // Verifica o próximo caractere sem avançar o índice principal (simula o lookahead e evita o retract).
+            if (buffer[indice_leitura + 1] == '-') {
+                // Atribuição: <-
+                token.type = TOKEN_KEYWORD; // Pode criar um TOKEN_ATRIBUICAO no enum futuramente
+                indice_leitura += 2;
+                return token;
+            } else if (buffer[indice_leitura + 1] == '=') {
+                // Menor ou igual: <=
+                token.type = TOKEN_OP_REL;
+                token.attribute.op_code = OP_LE;
+                indice_leitura += 2;
+                return token;
+            } else if (buffer[indice_leitura + 1] == '>') {
+                // Diferente: <>
+                token.type = TOKEN_OP_REL;
+                // NOTA: O enum do enunciado não possui OP_NE, mas o operador existe no Anexo I.
+                indice_leitura += 2;
+                return token;
+            } else {
+                // Menor: <[cite: 6]
+                token.type = TOKEN_OP_REL;
+                token.attribute.op_code = OP_LT;
+                indice_leitura++;
+                return token;
+            }
+
+        } else if (c == '=') {
+            // Igual: =
+            // O Anexo I estipula que a comparação de igualdade utiliza o sinal "=" (ex: senhaDigitada = 1234)[cite: 6].
+            token.type = TOKEN_OP_REL;
+            token.attribute.op_code = OP_EQ;
+            indice_leitura++;
+            return token;
+        }            
         // ==========================================================
         // TRATAMENTO DE ERRO LÉXICO
         // ==========================================================
