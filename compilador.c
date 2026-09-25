@@ -144,6 +144,40 @@ Token obterToken() {
             
             return token;
         }
+        if(isdigit(codigo_fonte[indice_leitura]))
+    {
+        int i = 0;
+        char lexema[100];
+        int numero_real = 0;
+
+        while(isdigit(codigo_fonte[indice_leitura]) && i < 100)
+        {
+            lexema[i++] = codigo_fonte[indice_leitura++];
+        }
+        if(isdigit(codigo_fonte[indice_leitura + 1]) && codigo_fonte[indice_leitura] == '.')
+        {
+            numero_real = 1;
+            lexema[i++] = codigo_fonte[indice_leitura++];
+            while(isdigit(codigo_fonte[indice_leitura]) && i < 100)
+            {
+                lexema[i++] = codigo_fonte[indice_leitura++];
+            }
+        }
+        lexema[i] = '\0';
+        if(numero_real)
+        {   
+            tokenRetorno.type = TOKEN_NUM_FLOAT;
+            tokenRetorno.attribute.float_value = atof(lexema);
+        }
+        else
+        {
+            tokenRetorno.type = TOKEN_NUM_INT;
+            tokenRetorno.attribute.int_value = atoi(lexema);
+        }
+        tokenRetorno.line = linha_atual;
+        return tokenRetorno;
+
+    }
 
         // TODO: Implementar lógica para Operadores Relacionais (TOKEN_OP_REL) e Atribuição (<-)
         // ==========================================================
