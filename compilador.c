@@ -4,39 +4,43 @@
 #include <ctype.h>
 
 // ============================================================================
-// DEFINIÇÕES LÉXICAS E ESTRUTURAS DE DADOS
+// ETAPA 1: DEFINIÇÕES LÉXICAS E ESTRUTURAS DE DADOS
 // ============================================================================
 
-// Definição dos nomes dos tokens (usados pelo Parser)[cite: 1]
+// Definição dos nomes dos tokens (usados pelo Parser)
 typedef enum {
     TOKEN_EOF = 0,
-    TOKEN_ID,           // Identificadores (variáveis, funções)[cite: 1]
-    TOKEN_NUM_INT,      // Números inteiros (Ex: 42)[cite: 1]
-    TOKEN_NUM_FLOAT,    // Números reais (Ex: 3.14)[cite: 1]
-    TOKEN_OP_REL,       // Operadores relacionais[cite: 1]
-    TOKEN_KEYWORD       // Palavras reservadas[cite: 1]
+    TOKEN_ID,           // Identificadores (variáveis, funções)
+    TOKEN_NUM_INT,      // Números inteiros (Ex: 42)
+    TOKEN_NUM_FLOAT,    // Números reais (Ex: 3.14)
+    TOKEN_OP_REL,       // Operadores relacionais
+    TOKEN_KEYWORD,      // Palavras reservadas
+    
+    // NOTA: Para o Parser funcionar na Etapa 3, precisaremos de estender este enum 
+    // futuramente para incluir TOKEN_OP_ARIT (+, -), TOKEN_ATRIBUICAO (<-) 
+    // e TOKEN_PONTUACAO ( (, ), :, , ).
 } TokenNome;
 
-// Sub-códigos para especificar o atributo de operadores relacionais[cite: 1]
+// Sub-códigos para especificar o atributo de operadores relacionais
 typedef enum {
-    OP_LT,  // < (Less Than)[cite: 1]
-    OP_LE,  // <= (Less or Equal)[cite: 1]
-    OP_EQ,  // == (Equal)[cite: 1]
-    OP_GT,  // > (Greater Than)[cite: 1]
-    OP_GE   // >= (Greater or Equal)[cite: 1]
+    OP_LT,  // < (Less Than)
+    OP_LE,  // <= (Less or Equal)
+    OP_EQ,  // == (Equal)
+    OP_GT,  // > (Greater Than)
+    OP_GE   // >= (Greater or Equal)
 } OpRelAtributo;
 
-// Estrutura do Token com a Union de Atributos[cite: 1]
+// Estrutura do Token com a Union de Atributos
 typedef struct {
-    TokenNome type;     // Nome do token[cite: 1]
-    int line;           // Para tratamento de erros[cite: 1]
+    TokenNome type;     // Nome do token
+    int line;           // Para tratamento de erros
     
-    // valor do atributo[cite: 1]
+    // valor do atributo
     union {
-        int table_index;        // índice para Tabela de Símbolos[cite: 1]
-        int int_value;          // Valor literal convertido[cite: 1]
-        double float_value;     // Valor literal convertido[cite: 1]
-        OpRelAtributo op_code;  // operador relacional específico[cite: 1]
+        int table_index;        // índice para Tabela de Símbolos
+        int int_value;          // Valor literal convertido
+        double float_value;     // Valor literal convertido
+        OpRelAtributo op_code;  // operador relacional específico
     } attribute;
 } Token;
 
@@ -44,92 +48,155 @@ typedef struct {
 // VARIÁVEIS GLOBAIS
 // ============================================================================
 
-char *buffer;       // Ponteiro para armazenar o código fonte carregado em memória[cite: 2, 3].
-Token lookahead;    // Armazena o símbolo/token atual a ser avaliado pelo analisador sintático[cite: 2, 3].
+char *buffer;             // Ponteiro para armazenar o código fonte carregado em memória.
+Token lookahead;          // Armazena o símbolo/token atual a ser avaliado pelo sintático.
 
-// TODO: Declarar variáveis globais para controlar a linha atual do ficheiro (ex: int linhaAtual = 1;).
-// TODO: Declarar um apontador ou índice de leitura para percorrer o 'buffer' caractere a caractere.
+int linha_atual = 1;      // Controla a linha atual para relatórios de erro.
+int indice_leitura = 0;   // CORRIGIDO: Em C, os índices de arrays/strings começam em 0.
 
-// ============================================================================
-// PROTÓTIPOS DE FUNÇÕES
-// ============================================================================
-
-// --- Analisador Léxico (Scanner) ---
-Token obterToken(); // Lê os caracteres do buffer, agrupa em lexemas e retorna o próximo Token[cite: 2].
-
-// --- Analisador Sintático (Parser) ---
-void nextToken();         // Faz chamadas à função obterToken() para alimentar o Parser[cite: 2].
-void consome(TokenNome t); // Verifica se o lookahead é igual ao token esperado e avança[cite: 3].
-
-// TODO: Etapa 1 - Após definir a Gramática Livre de Contexto no papel/documentação, 
-// criar aqui os protótipos das funções mutuamente recursivas para cada Não-Terminal.
-// Exemplo: 
-// void programa();
-// void declaracoes();
-// void comando_se();
+FILE *arquivo_saida;      // Ponteiro para o ficheiro onde os tokens serão guardados.
 
 // ============================================================================
-// IMPLEMENTAÇÃO DO ANALISADOR LÉXICO (SCANNER)
+// ETAPA 2: ANALISADOR LÉXICO (SCANNER)
 // ============================================================================
 
 Token obterToken() {
-    Token tokenRetorno;
-    tokenRetorno.type = TOKEN_EOF; // Valor por omissão
-    
-    // TODO: Implementar a máquina de estados (Diagrama de Transições) para identificar:
-    // 1. Remoção de espaços em branco (espaço, \n, \t)[cite: 4].
-    // 2. Contagem de linhas (incrementar 'linhaAtual' quando encontrar \n)[cite: 4].
-    // 3. Ignorar comentários (ex: // até ao fim da linha)[cite: 4].
-    // 4. Reconhecer Números (Inteiros e Reais)[cite: 4].
-    // 5. Reconhecer Operadores Relacionais (e definir o op_code correto)[cite: 4].
-    // 6. Reconhecer Palavras Reservadas (keywords)[cite: 4].
-    // 7. Reconhecer Identificadores[cite: 4].
-    
-    // TODO: Em caso de falha no reconhecimento, imprimir "ERRO LÉXICO" com a linha e a sequência errada, e usar exit(1)[cite: 2].
-    
-    // TODO: Antes de retornar o token, imprimir no ecrã e gravar no ficheiro de saída no formato: 
-    // "Número da Linha do Átomo# NomeToken | Atributo"[cite: 2].
-    
-    return tokenRetorno;
+    Token token;
+    token.type = TOKEN_EOF; // Valor por omissão
+    char c;
+
+    // Loop principal: percorre o buffer até encontrar o fim do ficheiro ('\0')
+    while (buffer[indice_leitura] != '\0') {
+        c = buffer[indice_leitura];
+
+        // 1. REMOÇÃO DE ESPAÇOS E CONTROLO DE LINHAS
+        if (c == ' ' || c == '\t' || c == '\r') {
+            indice_leitura++;
+            continue;
+        }
+        if (c == '\n') {
+            linha_atual++;
+            indice_leitura++;
+            continue;
+        }
+
+        // 2. IGNORAR COMENTÁRIOS DE LINHA (//)
+        if (c == '/' && buffer[indice_leitura + 1] == '/') {
+            while (buffer[indice_leitura] != '\n' && buffer[indice_leitura] != '\0') {
+                indice_leitura++;
+            }
+            continue; // O '\n' será tratado na próxima iteração do while
+        }
+
+        token.line = linha_atual; // Regista a linha onde o token começou
+
+        // ==========================================================
+        // 3. MÁQUINA DE ESTADOS: RECONHECIMENTO DE TOKENS
+        // ==========================================================
+        
+        // TODO: Implementar lógica para Números (TOKEN_NUM_INT, TOKEN_NUM_FLOAT)
+        
+        // TODO: Implementar lógica para Identificadores e Palavras Reservadas (TOKEN_ID, TOKEN_KEYWORD)
+
+        // TODO: Implementar lógica para Operadores Relacionais (TOKEN_OP_REL) e Atribuição (<-)
+
+        // ==========================================================
+        // TRATAMENTO DE ERRO LÉXICO
+        // ==========================================================
+        // Se chegou aqui, encontrou um caractere inválido
+        printf("ERRO LÉXICO\n");
+        printf("Linha: %d\n", linha_atual);
+        printf("Sequência incorreta: %c\n", c);
+        exit(1); // Aborta a compilação
+    }
+
+    return token;
 }
 
 // ============================================================================
-// IMPLEMENTAÇÃO DO ANALISADOR SINTÁTICO (PARSER)
+// ETAPA 3: ANALISADOR SINTÁTICO (PARSER)
 // ============================================================================
 
+// Protótipos das funções auxiliares
+void nextToken();
+void consome(TokenNome t);
+
+// TODO: Protótipos das funções da Gramática (Ex: void programa(); void comando_se();)
+
 void nextToken() {
-    // A interação entre léxico e sintático ocorre aqui[cite: 2].
+    // Alimenta o parser pedindo o próximo token ao scanner
     lookahead = obterToken();
 }
 
 void consome(TokenNome tokenEsperado) {
-    // TODO: Verificar se lookahead.type == tokenEsperado[cite: 3].
-    // Se SIM: chamar nextToken() para avançar[cite: 3].
-    // Se NÃO: imprimir "ERRO SINTÁTICO", mostrar o token incorreto e a linha, e usar exit(1) para abortar[cite: 2, 3].
+    if (lookahead.type == tokenEsperado) {
+        nextToken();
+    } else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        // Mostrar qual token falhou (pode ser melhorado depois)
+        printf("Token inesperado encontrado.\n");
+        exit(1);
+    }
 }
 
-// TODO: Implementar as funções de cada Não-Terminal (ex: void programa() { ... })[cite: 3].
+// TODO: Implementação das funções da gramática (Ex: void programa() { ... })
 
 // ============================================================================
-// FUNÇÃO PRINCIPAL
+// MAIN: PONTO DE ENTRADA E LEITURA DO FICHEIRO
 // ============================================================================
 
 int main(int argc, char *argv[]) {
-    // TODO: Verificar se o nome do ficheiro fonte foi passado por linha de comandos (argc > 1)[cite: 2].
-    
-    // TODO: Abrir o ficheiro fonte no modo de leitura ("r").
-    
-    // TODO: Alocar memória para o 'buffer' e carregar todo o conteúdo do ficheiro para esta variável[cite: 2].
-    // Fechar o ficheiro fonte após o carregamento.
-    
-    // TODO: Preparar o ficheiro de saída para escrever os tokens gerados.
-    
-    // Inicialização do processo de compilação
-    // nextToken(); // Carrega o primeiro token para o lookahead[cite: 3]
-    
-    // TODO: Chamar a função do símbolo inicial da gramática (ex: programa();) para iniciar a análise sintática[cite: 3].
-    
-    // TODO: Libertar a memória alocada para o buffer (free).
-    
+    // 1. Verificação dos argumentos da linha de comandos
+    if (argc < 2) {
+        printf("Erro: Ficheiro fonte nao informado.\n");
+        printf("Uso: %s <nome_do_arquivo.txt>\n", argv[0]);
+        return 1;
+    }
+
+    // 2. Abrir o ficheiro fonte
+    FILE *arquivo_fonte = fopen(argv[1], "r");
+    if (arquivo_fonte == NULL) {
+        printf("Erro: Nao foi possivel abrir o ficheiro %s\n", argv[1]);
+        return 1;
+    }
+
+    // 3. Alocar memória e carregar o ficheiro para o 'buffer'
+    fseek(arquivo_fonte, 0, SEEK_END);
+    long tamanho_ficheiro = ftell(arquivo_fonte);
+    rewind(arquivo_fonte);
+
+    buffer = (char *)malloc((tamanho_ficheiro + 1) * sizeof(char));
+    if (buffer == NULL) {
+        printf("Erro: Falha na alocacao de memoria para o buffer.\n");
+        fclose(arquivo_fonte);
+        return 1;
+    }
+
+    fread(buffer, sizeof(char), tamanho_ficheiro, arquivo_fonte);
+    buffer[tamanho_ficheiro] = '\0'; // Garante o fim da string
+    fclose(arquivo_fonte);
+
+    // 4. Preparar ficheiro de saída para a Etapa 2
+    arquivo_saida = fopen("saida_tokens.txt", "w");
+
+    // ========================================================================
+    // TESTE DA ETAPA 2 (ANALISADOR LÉXICO)
+    // Para testar, vamos ler e imprimir todos os tokens até encontrar o fim (EOF).
+    // Quando passarmos para a Etapa 3, substituímos este loop por:
+    // nextToken();
+    // programa();
+    // ========================================================================
+    Token t;
+    do {
+        t = obterToken();
+        // Aqui imprimiremos o token no formato exigido pelo enunciado.
+        // (Será feito dentro do obterToken ou aqui no loop)
+    } while (t.type != TOKEN_EOF);
+
+    // Limpeza de memória e fecho de ficheiros
+    free(buffer);
+    if (arquivo_saida != NULL) fclose(arquivo_saida);
+
     return 0;
 }
