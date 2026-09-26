@@ -34,7 +34,7 @@ typedef enum {
 typedef struct {
     TokenNome type;     // Nome do token
     int line;           // Para tratamento de erros
-    
+    char lexema[100];
     // valor do atributo
     union {
         int table_index;        // índice para Tabela de Símbolos
@@ -254,14 +254,23 @@ Token obterToken() {
 // ETAPA 3: ANALISADOR SINTÁTICO (PARSER)
 // ============================================================================
 
-// Protótipos das funções auxiliares
-void nextToken();
-void consome(TokenNome t);
 
-// TODO: Protótipos das funções da Gramática (Ex: void programa(); void comando_se();)
+void nextToken();
+void consome(TokenNome tokenEsperado);
+void consome_palavra(const char *palavraEsperada);
+
+// Protótipos das funções da Gramática (Nomenclatura Descritiva - Opção 1)
+void analisa_algoritmo_principal();
+void processa_bloco_variaveis();
+void avalia_lista_comandos();
+void avalia_comando_condicional();
+void avalia_comando_repeticao();
+void analisa_subrotinas();
+void avalia_expressao();
+
+// --- Funções Auxiliares do Sintático ---
 
 void nextToken() {
-    // Alimenta o parser pedindo o próximo token ao scanner
     lookahead = obterToken();
 }
 
@@ -271,13 +280,77 @@ void consome(TokenNome tokenEsperado) {
     } else {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
-        // Mostrar qual token falhou (pode ser melhorado depois)
-        printf("Token inesperado encontrado.\n");
+        printf("Token inesperado encontrado: %s\n", lookahead.lexema);
         exit(1);
     }
 }
 
-// TODO: Implementação das funções da gramática (Ex: void programa() { ... })
+// Nova função para consumir palavras reservadas específicas com precisão
+void consome_palavra(const char *palavraEsperada) {
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lookahead.lexema, palavraEsperada) == 0) {
+        nextToken();
+    } else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Esperado '%s', mas encontrado '%s'\n", palavraEsperada, lookahead.lexema);
+        exit(1);
+    }
+}
+
+// --- Funções Recursivas (Não-Terminais da Gramática) ---
+
+void analisa_algoritmo_principal() {
+    // TODO: Consumir palavra "algoritmo"[cite: 6]
+    // TODO: Consumir nome do programa (TOKEN_ID ou TOKEN_STRING dependendo de como fizerem)
+    // TODO: Chamar processa_bloco_variaveis() (se existir o bloco var)[cite: 7]
+    // TODO: Chamar analisa_subrotinas() (se existirem procedimentos/funcoes declaradas)
+    // TODO: Consumir palavra "inicio"[cite: 6]
+    // TODO: Chamar avalia_lista_comandos()[cite: 7]
+    // TODO: Consumir palavra "fimalgoritmo"[cite: 6]
+}
+
+void processa_bloco_variaveis() {
+    // TODO: Verificar se lookahead é "var". Se for, consumir.[cite: 6]
+    // TODO: Fazer um loop (while) enquanto o lookahead for um TOKEN_ID[cite: 7]
+    // TODO: Dentro do loop, consumir TOKEN_ID, consumir ':' (requer adicionar ao léxico)
+    // TODO: Consumir o tipo (inteiro, real, caractere, logico)[cite: 6]
+}
+
+void avalia_lista_comandos() {
+    // TODO: Fazer um loop avaliando o lookahead[cite: 7]
+    // TODO: Se for "se", chama avalia_comando_condicional()
+    // TODO: Se for "enquanto" ou "para", chama avalia_comando_repeticao()
+    // TODO: Se for "escreva", "escreval", ou "leia", consome e avalia os parâmetros[cite: 6]
+    // TODO: Se for TOKEN_ID, é atribuição ou chamada de procedimento (ex: variavel <- expressao)
+}
+
+void avalia_comando_condicional() {
+    // TODO: Consumir "se"[cite: 6]
+    // TODO: Consumir '('
+    // TODO: Chamar avalia_expressao() (expressão lógica)[cite: 7]
+    // TODO: Consumir ')'
+    // TODO: Consumir "entao"[cite: 6]
+    // TODO: Chamar avalia_lista_comandos() (para o bloco verdadeiro)
+    // TODO: Fatoração à esquerda: verificar se o lookahead é "senao".[cite: 7]
+    //       Se for, consumir "senao" e chamar avalia_lista_comandos() para o bloco falso.
+    // TODO: Consumir "fimse"[cite: 6]
+}
+
+void avalia_comando_repeticao() {
+    // TODO: Verificar se é um loop "enquanto" ou "para"[cite: 6, 7]
+    // TODO: Lógica para "enquanto (exp) faca ... fimenquanto"
+    // TODO: Lógica para "para ID de EXP ate EXP passo EXP faca ... fimpara"
+}
+
+void analisa_subrotinas() {
+    // TODO: Lógica para consumir "procedimento" ou "funcao" e seus blocos internos[cite: 6, 7]
+}
+
+void avalia_expressao() {
+    // TODO: Lógica para avaliar contas matemáticas ou comparações booleanas[cite: 7]
+    // DICA: Para fatorar a esquerda e respeitar a ordem matemática, 
+    // costuma-se dividir em avalia_termo() e avalia_fator()[cite: 7].
+}
 
 // ============================================================================
 // MAIN: PONTO DE ENTRADA E LEITURA DO FICHEIRO
@@ -314,22 +387,28 @@ int main(int argc, char *argv[]) {
     codigo_fonte[tamanho_ficheiro] = '\0'; // Garante o fim da string
     fclose(arquivo_fonte);
 
-    // 4. Preparar ficheiro de saída para a Etapa 2
+    // 4. Preparar ficheiro de saída
     arquivo_saida = fopen("saida_tokens.txt", "w");
 
     // ========================================================================
-    // TESTE DA ETAPA 2 (ANALISADOR LÉXICO)
-    // Para testar, vamos ler e imprimir todos os tokens até encontrar o fim (EOF).
-    // Quando passarmos para a Etapa 3, substituímos este loop por:
-    // nextToken();
-    // programa();
+    // TESTE DA ETAPA 3 (ANALISADOR SINTÁTICO ATIVADO)
     // ========================================================================
+    
+    // Inicializa a variável lookahead com o primeiro token do arquivo[cite: 7]
+    nextToken(); 
+    
+    // Inicia a análise descendente pela regra principal da gramática[cite: 7]
+    analisa_algoritmo_principal();
+    
+    printf("Compilação concluída com sucesso. Código sintaticamente correto!\n");
+
+    /* BLOCO DA ETAPA 2 (COMENTADO) - Descomente se quiser apenas imprimir os tokens
     Token t;
     do {
         t = obterToken();
-        // Aqui imprimiremos o token no formato exigido pelo enunciado.
-        // (Será feito dentro do obterToken ou aqui no loop)
+        printf("Lido token tipo %d com lexema '%s'\n", t.type, t.lexema);
     } while (t.type != TOKEN_EOF);
+    */
 
     // Limpeza de memória e fecho de ficheiros
     free(codigo_fonte);
