@@ -456,20 +456,88 @@ void avalia_lista_comandos() {
 }
 
 void avalia_comando_condicional() {
-    // TODO: Consumir "se"[cite: 7]
-    // TODO: Consumir '('
-    // TODO: Chamar avalia_expressao() (expressão lógica)[cite: 8]
-    // TODO: Consumir ')'
-    // TODO: Consumir "entao"[cite: 7]
-    // TODO: Chamar avalia_lista_comandos() (para o bloco verdadeiro)
-    // TODO: Fatoração à esquerda: verificar se lexema_atual é "senao"[cite: 8].
-    //       Se for, consumir "senao" e chamar avalia_lista_comandos() para o bloco falso.
-    // TODO: Consumir "fimse"[cite: 7]
+    // Consome a palavra reservada inicial da estrutura de controle
+    consome_palavra("se");
+
+    // Consome o parêntese que abre a expressão lógica
+    consome_palavra("(");
+
+    // Avalia a expressão/condição que fica dentro dos parênteses
+    avalia_expressao(); 
+
+    // Consome o parêntese que fecha a expressão lógica
+    consome_palavra(")");
+
+    // Consome a palavra reservada "entao", que indica o início do bloco verdadeiro
+    consome_palavra("entao");
+
+    // Avalia os comandos dentro do bloco "se"
+    avalia_lista_comandos();
+
+    // Verificação (Fatoração à esquerda): O bloco 'senao' é opcional.
+    // Olhamos para o próximo token para ver se a cláusula 'senao' existe
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "senao") == 0) {
+        consome_palavra("senao");
+
+        // Avalia os comandos dentro do bloco "senao"
+        avalia_lista_comandos();
+    }
+
+    // Consome a palavra reservada "fimse" encerrando a estrutura condicional
+    consome_palavra("fimse");
 }
 
 void avalia_comando_repeticao() {
-    // TODO: Lógica para "enquanto (exp) faca ... fimenquanto"[cite: 7, 8]
-    // TODO: Lógica para "para ID de EXP ate EXP passo EXP faca ... fimpara"[cite: 7, 8]
+    / 1. Estrutura: enquanto (expressão) faca ... fimenquanto
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "enquanto") == 0) {
+        consome_palavra("enquanto");
+
+        // A condição do enquanto está sempre entre parênteses no MiniVisualg
+        consome_palavra("(");
+        avalia_expressao(); 
+        consome_palavra(")");
+
+        consome_palavra("faca");
+
+        // Avalia as instruções dentro do laço
+        avalia_lista_comandos();
+
+        consome_palavra("fimenquanto");
+    } 
+    // 2. Estrutura: para ID de expressão ate expressão [passo expressão] faca ... fimpara
+    else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "para") == 0) {
+        consome_palavra("para");
+
+        // Consome a variável de controlo do laço (ex: 'i')
+        consome(TOKEN_ID); 
+
+        consome_palavra("de");
+        avalia_expressao(); // Avalia o valor inicial da contagem
+
+        consome_palavra("ate");
+        avalia_expressao(); // Avalia o valor limite da contagem
+
+        // Verificação do "passo": Como visto no algoritmo "ContagemRegressiva", o passo é opcional.
+        // O algoritmo "ContagemSimples" omite o passo, logo precisamos de verificar se ele existe.
+        if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "passo") == 0) {
+            consome_palavra("passo");
+            avalia_expressao(); // Avalia o valor do incremento/decremento
+        }
+
+        consome_palavra("faca");
+
+        // Avalia as instruções dentro do laço
+        avalia_lista_comandos();
+
+        consome_palavra("fimpara");
+    }
+    // Tratamento de segurança, caso a função seja chamada indevidamente
+    else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Comando de repetição inválido. Encontrado: %s\n", lexema_atual);
+        exit(1);
+    }
 }
 
 void analisa_subrotinas() {
