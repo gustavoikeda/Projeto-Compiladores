@@ -48,7 +48,7 @@ typedef struct {
 // VARIÁVEIS GLOBAIS
 // ============================================================================
 
-char *buffer;             // Ponteiro para armazenar o código fonte carregado em memória.
+char *codigo_fonte;             // Ponteiro para armazenar o código fonte carregado em memória.
 Token lookahead;          // Armazena o símbolo/token atual a ser avaliado pelo sintático.
 
 int linha_atual = 1;      // Controla a linha atual para relatórios de erro.
@@ -65,9 +65,9 @@ Token obterToken() {
     token.type = TOKEN_EOF; // Valor por omissão
     char c;
 
-    // Loop principal: percorre o buffer até encontrar o fim do ficheiro ('\0')
-    while (buffer[indice_leitura] != '\0') {
-        c = buffer[indice_leitura];
+    // Loop principal: percorre o codigo_fonte até encontrar o fim do ficheiro ('\0')
+    while (codigo_fonte[indice_leitura] != '\0') {
+        c = codigo_fonte[indice_leitura];
 
         // 1. REMOÇÃO DE ESPAÇOS E CONTROLO DE LINHAS
         if (c == ' ' || c == '\t' || c == '\r') {
@@ -81,8 +81,8 @@ Token obterToken() {
         }
 
         // 2. IGNORAR COMENTÁRIOS DE LINHA (//)
-        if (c == '/' && buffer[indice_leitura + 1] == '/') {
-            while (buffer[indice_leitura] != '\n' && buffer[indice_leitura] != '\0') {
+        if (c == '/' && codigo_fonte[indice_leitura + 1] == '/') {
+            while (codigo_fonte[indice_leitura] != '\n' && codigo_fonte[indice_leitura] != '\0') {
                 indice_leitura++;
             }
             continue; // O '\n' será tratado na próxima iteração do while
@@ -104,19 +104,19 @@ Token obterToken() {
         // Reconhecimento de Identificadores e Palavras Reservadas
         // A transição inicial exige que o lexema comece obrigatoriamente por uma letra.
         if (isalpha(c)) {
-            char lexema[100]; // Buffer temporário para armazenar a palavra
+            char lexema[100]; // codigo_fonte temporário para armazenar a palavra
             int i = 0;
             
             // O estado avança e consome os próximos caracteres enquanto forem letras, dígitos ou sublinhados
-            while (isalpha(buffer[indice_leitura]) || isdigit(buffer[indice_leitura]) || buffer[indice_leitura] == '_') {
-                if (i < 99) { // Proteção contra overflow do buffer
-                    lexema[i++] = buffer[indice_leitura];
+            while (isalpha(codigo_fonte[indice_leitura]) || isdigit(codigo_fonte[indice_leitura]) || codigo_fonte[indice_leitura] == '_') {
+                if (i < 99) { // Proteção contra overflow do codigo_fonte
+                    lexema[i++] = codigo_fonte[indice_leitura];
                 }
                 indice_leitura++;
             }
             lexema[i] = '\0'; // Finaliza a string do lexema
             
-            // NOTA SOBRE O RETRACT: Como a leitura avalia diretamente o índice do array (buffer[indice_leitura]),
+            // NOTA SOBRE O RETRACT: Como a leitura avalia diretamente o índice do array (codigo_fonte[indice_leitura]),
             // quando o laço while falha (encontrando o caractere "other"), o 'indice_leitura' fica 
             // perfeitamente posicionado nesse caractere limitador. Isto simula nativamente a operação retract()
             
@@ -144,8 +144,9 @@ Token obterToken() {
             
             return token;
         }
+
         if(isdigit(codigo_fonte[indice_leitura]))
-    {
+        {
         int i = 0;
         char lexema[100];
         int numero_real = 0;
@@ -166,16 +167,16 @@ Token obterToken() {
         lexema[i] = '\0';
         if(numero_real)
         {   
-            tokenRetorno.type = TOKEN_NUM_FLOAT;
-            tokenRetorno.attribute.float_value = atof(lexema);
+            token.type = TOKEN_NUM_FLOAT;
+            token.attribute.float_value = atof(lexema);
         }
         else
         {
-            tokenRetorno.type = TOKEN_NUM_INT;
-            tokenRetorno.attribute.int_value = atoi(lexema);
+            token.type = TOKEN_NUM_INT;
+            token.attribute.int_value = atoi(lexema);
         }
-        tokenRetorno.line = linha_atual;
-        return tokenRetorno;
+        token.line = linha_atual;
+        return token;
 
     }
 
@@ -186,7 +187,7 @@ Token obterToken() {
         
         if (c == '>') {
 
-            if (buffer[indice_leitura + 1] == '=') {
+            if (codigo_fonte[indice_leitura + 1] == '=') {
                 // Maior ou igual: >=[cite: 6]
                 token.type = TOKEN_OP_REL;
                 token.attribute.op_code = OP_GE;
@@ -203,18 +204,18 @@ Token obterToken() {
         } else if (c == '<') {
             
             // Verifica o próximo caractere sem avançar o índice principal (simula o lookahead e evita o retract).
-            if (buffer[indice_leitura + 1] == '-') {
+            if (codigo_fonte[indice_leitura + 1] == '-') {
                 // Atribuição: <-
                 token.type = TOKEN_KEYWORD; // Pode criar um TOKEN_ATRIBUICAO no enum futuramente
                 indice_leitura += 2;
                 return token;
-            } else if (buffer[indice_leitura + 1] == '=') {
+            } else if (codigo_fonte[indice_leitura + 1] == '=') {
                 // Menor ou igual: <=
                 token.type = TOKEN_OP_REL;
                 token.attribute.op_code = OP_LE;
                 indice_leitura += 2;
                 return token;
-            } else if (buffer[indice_leitura + 1] == '>') {
+            } else if (codigo_fonte[indice_leitura + 1] == '>') {
                 // Diferente: <>
                 token.type = TOKEN_OP_REL;
                 // NOTA: O enum do enunciado não possui OP_NE, mas o operador existe no Anexo I.
@@ -297,20 +298,20 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // 3. Alocar memória e carregar o ficheiro para o 'buffer'
+    // 3. Alocar memória e carregar o ficheiro para o 'codigo_fonte'
     fseek(arquivo_fonte, 0, SEEK_END);
     long tamanho_ficheiro = ftell(arquivo_fonte);
     rewind(arquivo_fonte);
 
-    buffer = (char *)malloc((tamanho_ficheiro + 1) * sizeof(char));
-    if (buffer == NULL) {
-        printf("Erro: Falha na alocacao de memoria para o buffer.\n");
+    codigo_fonte = (char *)malloc((tamanho_ficheiro + 1) * sizeof(char));
+    if (codigo_fonte == NULL) {
+        printf("Erro: Falha na alocacao de memoria para o codigo_fonte.\n");
         fclose(arquivo_fonte);
         return 1;
     }
 
-    fread(buffer, sizeof(char), tamanho_ficheiro, arquivo_fonte);
-    buffer[tamanho_ficheiro] = '\0'; // Garante o fim da string
+    fread(codigo_fonte, sizeof(char), tamanho_ficheiro, arquivo_fonte);
+    codigo_fonte[tamanho_ficheiro] = '\0'; // Garante o fim da string
     fclose(arquivo_fonte);
 
     // 4. Preparar ficheiro de saída para a Etapa 2
@@ -331,7 +332,7 @@ int main(int argc, char *argv[]) {
     } while (t.type != TOKEN_EOF);
 
     // Limpeza de memória e fecho de ficheiros
-    free(buffer);
+    free(codigo_fonte);
     if (arquivo_saida != NULL) fclose(arquivo_saida);
 
     return 0;
