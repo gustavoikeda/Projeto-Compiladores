@@ -318,10 +318,93 @@ void analisa_algoritmo_principal() {
 }
 
 void processa_bloco_variaveis() {
-    // TODO: Verificar se lexema_atual é "var". Se for, consumir[cite: 7].
-    // TODO: Fazer um loop (while) enquanto o lookahead for um TOKEN_ID[cite: 8].
-    // TODO: Dentro do loop, consumir TOKEN_ID, consumir ':'
-    // TODO: Consumir o tipo (inteiro, real, caractere, logico)[cite: 7].
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
+        consome_palavra("var");
+
+        while (lookahead.type == TOKEN_ID) {
+
+            while (1) 
+            {
+                consome(TOKEN_ID); 
+
+                if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0)
+                {
+                    consome_palavra(",");
+                } 
+                else 
+                {
+                    break; 
+                }
+            }
+            consome_palavra(":");
+
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
+
+                consome_palavra("vetor");
+                consome_palavra("[");
+
+    
+                if (lookahead.type == TOKEN_NUM_INT)
+                {
+                    consome(TOKEN_NUM_INT);
+                } 
+                else 
+                {
+                    consome(TOKEN_ID);
+                }
+
+                consome_palavra(".");
+                consome_palavra(".");
+
+                if (lookahead.type == TOKEN_NUM_INT) 
+                {
+                    consome(TOKEN_NUM_INT);
+                } 
+                else
+                {
+                    consome(TOKEN_ID);
+                }
+
+                consome_palavra("]");
+                consome_palavra("de");
+
+
+                if (lookahead.type == TOKEN_KEYWORD && (
+                    strcmp(lexema_atual, "inteiro") == 0 ||
+                    strcmp(lexema_atual, "real") == 0 ||
+                    strcmp(lexema_atual, "caractere") == 0 ||
+                    strcmp(lexema_atual, "logico") == 0))
+                {
+                    consome_palavra(lexema_atual);
+                } 
+                else 
+                {
+                    printf("ERRO SINTÁTICO\n");
+                    printf("Linha: %d\n", lookahead.line);
+                    printf("Tipo de vetor inválido ou inesperado: '%s'\n", lexema_atual);
+                    exit(1);
+                }
+
+            } 
+            else if 
+                (lookahead.type == TOKEN_KEYWORD && (
+                strcmp(lexema_atual, "inteiro") == 0 ||
+                strcmp(lexema_atual, "real") == 0 ||
+                strcmp(lexema_atual, "caractere") == 0 ||
+                strcmp(lexema_atual, "logico") == 0)) {
+                
+                consome_palavra(lexema_atual);
+
+            } 
+            else 
+            {
+                printf("ERRO SINTÁTICO\n");
+                printf("Linha: %d\n", lookahead.line);
+                printf("Esperado um tipo de dado (inteiro, real, caractere, logico, vetor), mas encontrado '%s'\n", lexema_atual);
+                exit(1);
+            }
+        }
+    }
 }
 
 void avalia_lista_comandos() {
