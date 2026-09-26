@@ -274,7 +274,9 @@ void avalia_comando_condicional();
 void avalia_comando_repeticao();
 void analisa_subrotinas();
 void avalia_expressao();
-
+void avalia_fator();
+void avalia_termo();
+void avalia_expressao_simples();
 // --- Funções Auxiliares do Sintático ---
 
 void nextToken() {
@@ -308,20 +310,150 @@ void consome_palavra(const char *palavraEsperada) {
 // --- Funções Recursivas (Não-Terminais da Gramática) ---
 
 void analisa_algoritmo_principal() {
-    // TODO: Consumir palavra "algoritmo" usando consome_palavra("algoritmo")[cite: 7]
-    // TODO: Consumir nome do programa (TOKEN_ID)
-    // TODO: Chamar processa_bloco_variaveis() (se existir o bloco var)[cite: 8]
-    // TODO: Chamar analisa_subrotinas() (se existirem procedimentos/funcoes declaradas)
-    // TODO: Consumir palavra "inicio"[cite: 7]
-    // TODO: Chamar avalia_lista_comandos()[cite: 8]
-    // TODO: Consumir palavra "fimalgoritmo"[cite: 7]
+    // Verifica se o bloco 'var' existe. Se não existir, a função retorna silenciosamente (produção vazia).
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
+        consome_palavra("var"); // Consome a palavra reservada 'var'[cite: 6].
+
+        // O bloco de variáveis continua enquanto encontrarmos identificadores (TOKEN_ID)[cite: 7].
+        while (lookahead.type == TOKEN_ID) {
+            
+            consome(TOKEN_ID); // Consome o nome da primeira variável[cite: 6].
+
+            // Permite a declaração de múltiplas variáveis na mesma linha (ex: nome, sobrenome: caractere)[cite: 6].
+            // (Nota: Assegure-se de que o léxico reconhece a vírgula como TOKEN_KEYWORD sintática)
+            while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
+                consome_palavra(",");
+                consome(TOKEN_ID);
+            }
+
+            consome_palavra(":"); // Consome o sinal de dois-pontos obrigatório[cite: 6].
+
+            // Verifica se a declaração é de um vetor (ex: vetor [1..3] de caractere)[cite: 6].
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
+                consome_palavra("vetor");
+                consome_palavra("[");
+                consome(TOKEN_NUM_INT); // Índice inicial[cite: 6]
+                
+                // O Anexo I mostra o uso de ".." para vetores. 
+                // O analisador léxico lerá como dois pontos finais sequenciais se não os agrupou.
+                consome_palavra(".");
+                consome_palavra(".");
+                
+                consome(TOKEN_NUM_INT); // Índice final[cite: 6]
+                consome_palavra("]");
+                consome_palavra("de");
+            }
+
+            // Consome o tipo da variável (inteiro, real, caractere ou logico)[cite: 6].
+            if (lookahead.type == TOKEN_KEYWORD && (
+                strcmp(lexema_atual, "inteiro") == 0 ||
+                strcmp(lexema_atual, "real") == 0 ||
+                strcmp(lexema_atual, "caractere") == 0 ||
+                strcmp(lexema_atual, "logico") == 0
+            )) {
+                // Guarda o tipo lido em uma variável temporária para usar no consome_palavra de forma dinâmica
+                char tipo_esperado[100];
+                strcpy(tipo_esperado, lexema_atual);
+                consome_palavra(tipo_esperado);
+            } else {
+                // Tratamento de falha preditiva caso o tipo informado não pertença à linguagem[cite: 7]
+                printf("ERRO SINTÁTICO\n");
+                printf("Linha: %d\n", lookahead.line);
+                printf("Tipo de variável inválido ou não suportado: %s\n", lexema_atual);
+                exit(1);
+            }
+        }
+    }
 }
 
 void processa_bloco_variaveis() {
-    // TODO: Verificar se lexema_atual é "var". Se for, consumir[cite: 7].
-    // TODO: Fazer um loop (while) enquanto o lookahead for um TOKEN_ID[cite: 8].
-    // TODO: Dentro do loop, consumir TOKEN_ID, consumir ':'
-    // TODO: Consumir o tipo (inteiro, real, caractere, logico)[cite: 7].
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
+        consome_palavra("var");
+
+        while (lookahead.type == TOKEN_ID) {
+
+            while (1) 
+            {
+                consome(TOKEN_ID); 
+
+                if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0)
+                {
+                    consome_palavra(",");
+                } 
+                else 
+                {
+                    break; 
+                }
+            }
+            consome_palavra(":");
+
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
+
+                consome_palavra("vetor");
+                consome_palavra("[");
+
+    
+                if (lookahead.type == TOKEN_NUM_INT)
+                {
+                    consome(TOKEN_NUM_INT);
+                } 
+                else 
+                {
+                    consome(TOKEN_ID);
+                }
+
+                consome_palavra(".");
+                consome_palavra(".");
+
+                if (lookahead.type == TOKEN_NUM_INT) 
+                {
+                    consome(TOKEN_NUM_INT);
+                } 
+                else
+                {
+                    consome(TOKEN_ID);
+                }
+
+                consome_palavra("]");
+                consome_palavra("de");
+
+
+                if (lookahead.type == TOKEN_KEYWORD && (
+                    strcmp(lexema_atual, "inteiro") == 0 ||
+                    strcmp(lexema_atual, "real") == 0 ||
+                    strcmp(lexema_atual, "caractere") == 0 ||
+                    strcmp(lexema_atual, "logico") == 0))
+                {
+                    consome_palavra(lexema_atual);
+                } 
+                else 
+                {
+                    printf("ERRO SINTÁTICO\n");
+                    printf("Linha: %d\n", lookahead.line);
+                    printf("Tipo de vetor inválido ou inesperado: '%s'\n", lexema_atual);
+                    exit(1);
+                }
+
+            } 
+            else if 
+                (lookahead.type == TOKEN_KEYWORD && (
+                strcmp(lexema_atual, "inteiro") == 0 ||
+                strcmp(lexema_atual, "real") == 0 ||
+                strcmp(lexema_atual, "caractere") == 0 ||
+                strcmp(lexema_atual, "logico") == 0)) {
+                
+                consome_palavra(lexema_atual);
+
+            } 
+            else 
+            {
+                printf("ERRO SINTÁTICO\n");
+                printf("Linha: %d\n", lookahead.line);
+                printf("Esperado um tipo de dado (inteiro, real, caractere, logico, vetor), mas encontrado '%s'\n", lexema_atual);
+                exit(1);
+            }
+        }
+    }
 }
 
 void avalia_lista_comandos() {
@@ -373,30 +505,219 @@ void avalia_lista_comandos() {
 }
 
 void avalia_comando_condicional() {
-    // TODO: Consumir "se"[cite: 7]
-    // TODO: Consumir '('
-    // TODO: Chamar avalia_expressao() (expressão lógica)[cite: 8]
-    // TODO: Consumir ')'
-    // TODO: Consumir "entao"[cite: 7]
-    // TODO: Chamar avalia_lista_comandos() (para o bloco verdadeiro)
-    // TODO: Fatoração à esquerda: verificar se lexema_atual é "senao"[cite: 8].
-    //       Se for, consumir "senao" e chamar avalia_lista_comandos() para o bloco falso.
-    // TODO: Consumir "fimse"[cite: 7]
+    // Consome a palavra reservada inicial da estrutura de controle
+    consome_palavra("se");
+
+    // Consome o parêntese que abre a expressão lógica
+    consome_palavra("(");
+
+    // Avalia a expressão/condição que fica dentro dos parênteses
+    avalia_expressao(); 
+
+    // Consome o parêntese que fecha a expressão lógica
+    consome_palavra(")");
+
+    // Consome a palavra reservada "entao", que indica o início do bloco verdadeiro
+    consome_palavra("entao");
+
+    // Avalia os comandos dentro do bloco "se"
+    avalia_lista_comandos();
+
+    // Verificação (Fatoração à esquerda): O bloco 'senao' é opcional.
+    // Olhamos para o próximo token para ver se a cláusula 'senao' existe
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "senao") == 0) {
+        consome_palavra("senao");
+
+        // Avalia os comandos dentro do bloco "senao"
+        avalia_lista_comandos();
+    }
+
+    // Consome a palavra reservada "fimse" encerrando a estrutura condicional
+    consome_palavra("fimse");
 }
 
 void avalia_comando_repeticao() {
-    // TODO: Lógica para "enquanto (exp) faca ... fimenquanto"[cite: 7, 8]
-    // TODO: Lógica para "para ID de EXP ate EXP passo EXP faca ... fimpara"[cite: 7, 8]
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "enquanto") == 0) {
+        consome_palavra("enquanto");
+
+        // A condição do enquanto está sempre entre parênteses no MiniVisualg
+        consome_palavra("(");
+        avalia_expressao(); 
+        consome_palavra(")");
+
+        consome_palavra("faca");
+
+        // Avalia as instruções dentro do laço
+        avalia_lista_comandos();
+
+        consome_palavra("fimenquanto");
+    } 
+    // 2. Estrutura: para ID de expressão ate expressão [passo expressão] faca ... fimpara
+    else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "para") == 0) {
+        consome_palavra("para");
+
+        // Consome a variável de controlo do laço (ex: 'i')
+        consome(TOKEN_ID); 
+
+        consome_palavra("de");
+        avalia_expressao(); // Avalia o valor inicial da contagem
+
+        consome_palavra("ate");
+        avalia_expressao(); // Avalia o valor limite da contagem
+
+        // Verificação do "passo": Como visto no algoritmo "ContagemRegressiva", o passo é opcional.
+        // O algoritmo "ContagemSimples" omite o passo, logo precisamos de verificar se ele existe.
+        if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "passo") == 0) {
+            consome_palavra("passo");
+            avalia_expressao(); // Avalia o valor do incremento/decremento
+        }
+
+        consome_palavra("faca");
+
+        // Avalia as instruções dentro do laço
+        avalia_lista_comandos();
+
+        consome_palavra("fimpara");
+    }
+    // Tratamento de segurança, caso a função seja chamada indevidamente
+    else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Comando de repetição inválido. Encontrado: %s\n", lexema_atual);
+        exit(1);
+    }
 }
 
 void analisa_subrotinas() {
-    // TODO: Lógica para consumir "procedimento" ou "funcao" e seus blocos internos[cite: 7, 8]
+    // Avalia continuamente se existem sub-rotinas declaradas
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
+        
+        if (strcmp(lexema_atual, "procedimento") == 0) {
+            consome_palavra("procedimento");
+            consome(TOKEN_ID); // Nome do procedimento
+            
+            // Avalia parâmetros opcionais[cite: 6]
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                do {
+                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
+                    consome(TOKEN_ID);
+                    consome_palavra(":");
+                    consome(TOKEN_KEYWORD); // Tipo da variável (inteiro, caractere, etc.)
+                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
+                consome_palavra(")");
+            }
+            
+            consome_palavra("inicio");
+            avalia_lista_comandos();
+            consome_palavra("fimprocedimento"); // Estrutura exigida pelo Anexo I[cite: 6]
+            
+        } else if (strcmp(lexema_atual, "funcao") == 0) {
+            consome_palavra("funcao");
+            consome(TOKEN_ID); // Nome da função
+            
+            // Avalia parâmetros
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                do {
+                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
+                    consome(TOKEN_ID);
+                    consome_palavra(":");
+                    consome(TOKEN_KEYWORD); 
+                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
+                consome_palavra(")");
+            }
+            
+            // Funções obrigam à definição do tipo de retorno[cite: 6]
+            consome_palavra(":");
+            consome(TOKEN_KEYWORD); // Tipo de retorno
+            
+            consome_palavra("inicio");
+            avalia_lista_comandos();
+            consome_palavra("fimfuncao"); // Estrutura exigida pelo Anexo I[cite: 6]
+        }
+    }
 }
 
+
+
+// Nível 4: Elementos base (Variáveis, Números, Parênteses e Booleanos)
+void avalia_fator() {
+    if (lookahead.type == TOKEN_ID) {
+        consome(TOKEN_ID);
+        // Lida com índices de vetores (ex: notas[i]) ou chamadas de função com parâmetros[cite: 6]
+        if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
+            consome_palavra("[");
+            avalia_expressao();
+            consome_palavra("]");
+        } else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+            consome_palavra("(");
+            avalia_expressao();
+            consome_palavra(")");
+        }
+    } else if (lookahead.type == TOKEN_NUM_INT) {
+        consome(TOKEN_NUM_INT);
+    } else if (lookahead.type == TOKEN_NUM_FLOAT) {
+        consome(TOKEN_NUM_FLOAT);
+    } else if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "verdadeiro") == 0 || strcmp(lexema_atual, "falso") == 0)) {
+        // Constantes lógicas suportadas[cite: 6]
+        if (strcmp(lexema_atual, "verdadeiro") == 0) consome_palavra("verdadeiro");
+        else consome_palavra("falso");
+    } else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+        // Resolve prioridade forçada por parênteses matemáticos[cite: 7]
+        consome_palavra("(");
+        avalia_expressao();
+        consome_palavra(")");
+    } else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Fator inválido na expressão matemática: %s\n", lexema_atual);
+        exit(1);
+    }
+}
+
+// Nível 3: Multiplicação, Divisão e Operadores Lógicos E/MOD
+void avalia_termo() {
+    avalia_fator();
+    // Operadores de alta prioridade[cite: 6]
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "*") == 0 || strcmp(lexema_atual, "/") == 0 || 
+           strcmp(lexema_atual, "\\") == 0 || strcmp(lexema_atual, "MOD") == 0 || 
+           strcmp(lexema_atual, "E") == 0)) {
+        
+        char operador[10];
+        strcpy(operador, lexema_atual);
+        consome_palavra(operador);
+        avalia_fator();
+    }
+}
+
+// Nível 2: Soma, Subtração e Operador Lógico OU
+void avalia_expressao_simples() {
+    avalia_termo();
+    // Operadores de baixa prioridade matemática[cite: 6]
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "+") == 0 || strcmp(lexema_atual, "-") == 0 || 
+           strcmp(lexema_atual, "OU") == 0)) {
+        
+        char operador[10];
+        strcpy(operador, lexema_atual);
+        consome_palavra(operador);
+        avalia_termo();
+    }
+}
+
+// Nível 1 (Principal): Comparações Relacionais (>, <, =, <>)
 void avalia_expressao() {
-    // TODO: Lógica para avaliar contas matemáticas ou comparações[cite: 8]
+    avalia_expressao_simples();
+    
+    // Verifica se o símbolo atual é um operador relacional do enum (TOKEN_OP_REL)[cite: 6]
+    if (lookahead.type == TOKEN_OP_REL) {
+        consome(TOKEN_OP_REL); 
+        avalia_expressao_simples();
+    }
 }
-
 // ============================================================================
 // MAIN: PONTO DE ENTRADA E LEITURA DO FICHEIRO
 // ============================================================================
