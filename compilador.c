@@ -488,7 +488,6 @@ void avalia_comando_condicional() {
 }
 
 void avalia_comando_repeticao() {
-    / 1. Estrutura: enquanto (expressão) faca ... fimenquanto
     if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "enquanto") == 0) {
         consome_palavra("enquanto");
 
