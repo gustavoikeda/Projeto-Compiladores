@@ -308,13 +308,60 @@ void consome_palavra(const char *palavraEsperada) {
 // --- Funções Recursivas (Não-Terminais da Gramática) ---
 
 void analisa_algoritmo_principal() {
-    // TODO: Consumir palavra "algoritmo" usando consome_palavra("algoritmo")[cite: 7]
-    // TODO: Consumir nome do programa (TOKEN_ID)
-    // TODO: Chamar processa_bloco_variaveis() (se existir o bloco var)[cite: 8]
-    // TODO: Chamar analisa_subrotinas() (se existirem procedimentos/funcoes declaradas)
-    // TODO: Consumir palavra "inicio"[cite: 7]
-    // TODO: Chamar avalia_lista_comandos()[cite: 8]
-    // TODO: Consumir palavra "fimalgoritmo"[cite: 7]
+    // Verifica se o bloco 'var' existe. Se não existir, a função retorna silenciosamente (produção vazia).
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
+        consome_palavra("var"); // Consome a palavra reservada 'var'[cite: 6].
+
+        // O bloco de variáveis continua enquanto encontrarmos identificadores (TOKEN_ID)[cite: 7].
+        while (lookahead.type == TOKEN_ID) {
+            
+            consome(TOKEN_ID); // Consome o nome da primeira variável[cite: 6].
+
+            // Permite a declaração de múltiplas variáveis na mesma linha (ex: nome, sobrenome: caractere)[cite: 6].
+            // (Nota: Assegure-se de que o léxico reconhece a vírgula como TOKEN_KEYWORD sintática)
+            while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
+                consome_palavra(",");
+                consome(TOKEN_ID);
+            }
+
+            consome_palavra(":"); // Consome o sinal de dois-pontos obrigatório[cite: 6].
+
+            // Verifica se a declaração é de um vetor (ex: vetor [1..3] de caractere)[cite: 6].
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
+                consome_palavra("vetor");
+                consome_palavra("[");
+                consome(TOKEN_NUM_INT); // Índice inicial[cite: 6]
+                
+                // O Anexo I mostra o uso de ".." para vetores. 
+                // O analisador léxico lerá como dois pontos finais sequenciais se não os agrupou.
+                consome_palavra(".");
+                consome_palavra(".");
+                
+                consome(TOKEN_NUM_INT); // Índice final[cite: 6]
+                consome_palavra("]");
+                consome_palavra("de");
+            }
+
+            // Consome o tipo da variável (inteiro, real, caractere ou logico)[cite: 6].
+            if (lookahead.type == TOKEN_KEYWORD && (
+                strcmp(lexema_atual, "inteiro") == 0 ||
+                strcmp(lexema_atual, "real") == 0 ||
+                strcmp(lexema_atual, "caractere") == 0 ||
+                strcmp(lexema_atual, "logico") == 0
+            )) {
+                // Guarda o tipo lido em uma variável temporária para usar no consome_palavra de forma dinâmica
+                char tipo_esperado[100];
+                strcpy(tipo_esperado, lexema_atual);
+                consome_palavra(tipo_esperado);
+            } else {
+                // Tratamento de falha preditiva caso o tipo informado não pertença à linguagem[cite: 7]
+                printf("ERRO SINTÁTICO\n");
+                printf("Linha: %d\n", lookahead.line);
+                printf("Tipo de variável inválido ou não suportado: %s\n", lexema_atual);
+                exit(1);
+            }
+        }
+    }
 }
 
 void processa_bloco_variaveis() {
