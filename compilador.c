@@ -14,7 +14,7 @@ typedef enum {
     TOKEN_NUM_INT,      // Números inteiros (Ex: 42)
     TOKEN_NUM_FLOAT,    // Números reais (Ex: 3.14)
     TOKEN_OP_REL,       // Operadores relacionais
-    TOKEN_KEYWORD       // Palavras reservadas
+    TOKEN_KEYWORD       // Palavras reservadas 
 } TokenNome;
 
 // Sub-códigos para especificar o atributo de operadores relacionais[cite: 7]
@@ -23,7 +23,8 @@ typedef enum {
     OP_LE,  // <= (Less or Equal)
     OP_EQ,  // == (Equal)
     OP_GT,  // > (Greater Than)
-    OP_GE   // >= (Greater or Equal)
+    OP_GE,  // >= (Greater or Equal)
+    OP_NE   // <> (Not Equal)
 } OpRelAtributo;
 
 // Estrutura do Token com a Union de Atributos estritamente igual à Figura 2[cite: 7]
@@ -123,8 +124,9 @@ Token obterToken() {
                 strcmp(lexema, "real") == 0 || strcmp(lexema, "caractere") == 0 || 
                 strcmp(lexema, "logico") == 0 || strcmp(lexema, "vetor") == 0 ||
                 strcmp(lexema, "procedimento") == 0 || strcmp(lexema, "fimprocedimento") == 0 ||
-                strcmp(lexema, "funcao") == 0 || strcmp(lexema, "retorne") == 0 ||
-                strcmp(lexema, "verdadeiro") == 0 || strcmp(lexema, "falso") == 0) {
+                strcmp(lexema, "funcao") == 0 || strcmp(lexema, "retorne") == 0 || strcmp(lexema, "fimfuncao") == 0 ||
+                strcmp(lexema, "verdadeiro") == 0 || strcmp(lexema, "falso") == 0 ||
+                strcmp(lexema, "MOD") == 0 || strcmp(lexema, "E") == 0 || strcmp(lexema, "OU") == 0) {
                 
                 token.type = TOKEN_KEYWORD;
             } else {
@@ -216,6 +218,7 @@ Token obterToken() {
                 return token;
             } else if (codigo_fonte[indice_leitura + 1] == '>') {
                 token.type = TOKEN_OP_REL;
+                token.attribute.op_code = OP_NE;
                 strcpy(lexema_atual, "<>");
                 indice_leitura += 2;
                 return token;
@@ -237,7 +240,7 @@ Token obterToken() {
         // --- Símbolos de Pontuação e Operadores Aritméticos ---
         // Essenciais para não causar "Erro Léxico" ao ler parênteses de chamadas e funções no Anexo I[cite: 7].
         if (c == '(' || c == ')' || c == '[' || c == ']' || c == ':' || c == ',' || 
-            c == '+' || c == '-' || c == '*' || c == '/' || c == '\\') {
+            c == '+' || c == '-' || c == '*' || c == '/' || c == '\\' || c == '.') {
             lexema_atual[0] = c;
             lexema_atual[1] = '\0';
             token.type = TOKEN_KEYWORD; // Tratado como Keyword sintática estrutural
@@ -281,6 +284,38 @@ void avalia_expressao_simples();
 
 void nextToken() {
     lookahead = obterToken(); // A variável global lexema_atual é atualizada aqui internamente[cite: 8]
+    
+    if (lookahead.type == TOKEN_EOF) return;
+
+    static int id_counter = 0; // Contador incremental para identificadores
+
+    if (lookahead.type == TOKEN_KEYWORD) {
+        if (isalpha(lexema_atual[0])) {
+            printf("%d# PALAVRA_RESERVADA | 0\n", lookahead.line);
+            if (arquivo_saida) fprintf(arquivo_saida, "%d# PALAVRA_RESERVADA | 0\n", lookahead.line);
+        } else {
+            if (strcmp(lexema_atual, "<-") == 0) {
+                printf("%d# OPERADOR_ATRIBUICAO | 0\n", lookahead.line);
+                if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_ATRIBUICAO | 0\n", lookahead.line);
+            } else {
+                printf("%d# OPERADOR_DELIMITADOR | %d\n", lookahead.line, lexema_atual[0]);
+                if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_DELIMITADOR | %d\n", lookahead.line, lexema_atual[0]);
+            }
+        }
+    } else if (lookahead.type == TOKEN_ID) {
+        printf("%d# IDENTIFICADOR | %d\n", lookahead.line, id_counter);
+        if (arquivo_saida) fprintf(arquivo_saida, "%d# IDENTIFICADOR | %d\n", lookahead.line, id_counter);
+        id_counter++;
+    } else if (lookahead.type == TOKEN_NUM_INT) {
+        printf("%d# NUMERO_INTEIRO | %d\n", lookahead.line, lookahead.attribute.int_value);
+        if (arquivo_saida) fprintf(arquivo_saida, "%d# NUMERO_INTEIRO | %d\n", lookahead.line, lookahead.attribute.int_value);
+    } else if (lookahead.type == TOKEN_NUM_FLOAT) {
+        printf("%d# NUMERO_REAL | %g\n", lookahead.line, lookahead.attribute.float_value);
+        if (arquivo_saida) fprintf(arquivo_saida, "%d# NUMERO_REAL | %g\n", lookahead.line, lookahead.attribute.float_value);
+    } else if (lookahead.type == TOKEN_OP_REL) {
+        printf("%d# OPERADOR_RELACIONAL | %d\n", lookahead.line, lookahead.attribute.op_code);
+        if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_RELACIONAL | %d\n", lookahead.line, lookahead.attribute.op_code);
+    }
 }
 
 void consome(TokenNome tokenEsperado) {
@@ -310,60 +345,23 @@ void consome_palavra(const char *palavraEsperada) {
 // --- Funções Recursivas (Não-Terminais da Gramática) ---
 
 void analisa_algoritmo_principal() {
-    // Verifica se o bloco 'var' existe. Se não existir, a função retorna silenciosamente (produção vazia).
-    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
-        consome_palavra("var"); // Consome a palavra reservada 'var'[cite: 6].
+    consome_palavra("algoritmo");
+    consome(TOKEN_ID); // Nome do algoritmo
 
-        // O bloco de variáveis continua enquanto encontrarmos identificadores (TOKEN_ID)[cite: 7].
-        while (lookahead.type == TOKEN_ID) {
-            
-            consome(TOKEN_ID); // Consome o nome da primeira variável[cite: 6].
-
-            // Permite a declaração de múltiplas variáveis na mesma linha (ex: nome, sobrenome: caractere)[cite: 6].
-            // (Nota: Assegure-se de que o léxico reconhece a vírgula como TOKEN_KEYWORD sintática)
-            while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
-                consome_palavra(",");
-                consome(TOKEN_ID);
-            }
-
-            consome_palavra(":"); // Consome o sinal de dois-pontos obrigatório[cite: 6].
-
-            // Verifica se a declaração é de um vetor (ex: vetor [1..3] de caractere)[cite: 6].
-            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
-                consome_palavra("vetor");
-                consome_palavra("[");
-                consome(TOKEN_NUM_INT); // Índice inicial[cite: 6]
-                
-                // O Anexo I mostra o uso de ".." para vetores. 
-                // O analisador léxico lerá como dois pontos finais sequenciais se não os agrupou.
-                consome_palavra(".");
-                consome_palavra(".");
-                
-                consome(TOKEN_NUM_INT); // Índice final[cite: 6]
-                consome_palavra("]");
-                consome_palavra("de");
-            }
-
-            // Consome o tipo da variável (inteiro, real, caractere ou logico)[cite: 6].
-            if (lookahead.type == TOKEN_KEYWORD && (
-                strcmp(lexema_atual, "inteiro") == 0 ||
-                strcmp(lexema_atual, "real") == 0 ||
-                strcmp(lexema_atual, "caractere") == 0 ||
-                strcmp(lexema_atual, "logico") == 0
-            )) {
-                // Guarda o tipo lido em uma variável temporária para usar no consome_palavra de forma dinâmica
-                char tipo_esperado[100];
-                strcpy(tipo_esperado, lexema_atual);
-                consome_palavra(tipo_esperado);
-            } else {
-                // Tratamento de falha preditiva caso o tipo informado não pertença à linguagem[cite: 7]
-                printf("ERRO SINTÁTICO\n");
-                printf("Linha: %d\n", lookahead.line);
-                printf("Tipo de variável inválido ou não suportado: %s\n", lexema_atual);
-                exit(1);
-            }
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "var") == 0 || strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
+        if (strcmp(lexema_atual, "var") == 0) {
+            processa_bloco_variaveis();
+        } else {
+            analisa_subrotinas();
         }
     }
+
+    consome_palavra("inicio");
+
+    avalia_lista_comandos();
+
+    consome_palavra("fimalgoritmo");
 }
 
 void processa_bloco_variaveis() {
@@ -464,7 +462,8 @@ void avalia_lista_comandos() {
               strcmp(lexema_atual, "para") == 0 ||
               strcmp(lexema_atual, "escreva") == 0 ||
               strcmp(lexema_atual, "escreval") == 0 ||
-              strcmp(lexema_atual, "leia") == 0
+              strcmp(lexema_atual, "leia") == 0 ||
+              strcmp(lexema_atual, "retorne") == 0
           ))) {
         
         // 1. Comando Condicional
@@ -477,6 +476,12 @@ void avalia_lista_comandos() {
             avalia_comando_repeticao();
         }
         
+        // Comando Retorne
+        else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "retorne") == 0) {
+            consome_palavra("retorne");
+            avalia_expressao();
+        }
+        
         // 3. Comandos de Entrada e Saída (I/O)
         else if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "escreva") == 0 || strcmp(lexema_atual, "escreval") == 0 || strcmp(lexema_atual, "leia") == 0)) {
             // Guarda qual o comando antes de avançar
@@ -486,7 +491,13 @@ void avalia_lista_comandos() {
             consome_palavra(comando); // Consome a palavra específica[cite: 7].
             consome_palavra("(");     // Consome o parêntese obrigatório[cite: 7].
             
-            // avalia_expressao();    // TODO: Descomentar quando a função estiver pronta
+            avalia_expressao();       // Chamada da função para analisar a expressão
+            
+            // Permite múltiplos argumentos separados por vírgula
+            while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
+                consome_palavra(",");
+                avalia_expressao();
+            }
             
             consome_palavra(")");     // Consome o fecho do parêntese[cite: 7].
         }
@@ -495,10 +506,30 @@ void avalia_lista_comandos() {
         else if (lookahead.type == TOKEN_ID) {
             consome(TOKEN_ID); 
             
+            // Pode ser um acesso a vetor: nomes[1]
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
+                consome_palavra("[");
+                avalia_expressao();
+                consome_palavra("]");
+            }
+            
+            // Pode ser chamada de procedimento: mostrar_erro("teste")
+            else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                if (lookahead.type != TOKEN_KEYWORD || strcmp(lexema_atual, ")") != 0) {
+                    avalia_expressao();
+                    while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
+                        consome_palavra(",");
+                        avalia_expressao();
+                    }
+                }
+                consome_palavra(")");
+            }
+            
             // Verifica se o símbolo seguinte é a seta de atribuição (<-)
             if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "<-") == 0) {
                 consome_palavra("<-");
-                // avalia_expressao(); // Avalia o cálculo[cite: 8]
+                avalia_expressao();   // Avalia o cálculo[cite: 8]
             }
         }
     }
@@ -644,16 +675,33 @@ void analisa_subrotinas() {
 
 // Nível 4: Elementos base (Variáveis, Números, Parênteses e Booleanos)
 void avalia_fator() {
+    // Suporte para sinal unário (ex: passo -2)
+    if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "-") == 0 || strcmp(lexema_atual, "+") == 0)) {
+        char op[10];
+        strcpy(op, lexema_atual);
+        consome_palavra(op);
+        avalia_fator(); // recursivamente avalia o fator após o sinal
+        return;
+    }
+
     if (lookahead.type == TOKEN_ID) {
         consome(TOKEN_ID);
-        // Lida com índices de vetores (ex: notas[i]) ou chamadas de função com parâmetros[cite: 6]
+        // Lida com índices de vetores (ex: notas[i])
         if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
             consome_palavra("[");
             avalia_expressao();
             consome_palavra("]");
-        } else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+        } 
+        // Lida com chamadas de função com múltiplos parâmetros (ex: somar(a, b))
+        else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
             consome_palavra("(");
-            avalia_expressao();
+            if (lookahead.type != TOKEN_KEYWORD || strcmp(lexema_atual, ")") != 0) {
+                avalia_expressao();
+                while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
+                    consome_palavra(",");
+                    avalia_expressao();
+                }
+            }
             consome_palavra(")");
         }
     } else if (lookahead.type == TOKEN_NUM_INT) {
@@ -765,6 +813,14 @@ int main(int argc, char *argv[]) {
     
     // Inicia a análise descendente pela regra principal da gramática[cite: 8]
     analisa_algoritmo_principal();
+    
+    // Verifica se realmente chegou ao final do arquivo
+    if (lookahead.type != TOKEN_EOF) {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Encontrado lixo após o 'fimalgoritmo': %s\n", lexema_atual);
+        exit(1);
+    }
     
     printf("Compilação concluída com sucesso. Código sintaticamente correto!\n");
 
