@@ -7,98 +7,115 @@
 // ETAPA 1: DEFINIÇÕES LÉXICAS E ESTRUTURAS DE DADOS
 // ============================================================================
 
-// Definição dos nomes dos tokens (usados pelo Parser)[cite: 7]
+/*
+ * Enum para os tipos de Tokens.
+ * Agrupamos palavras reservadas e símbolos simples (se, var, +) no TOKEN_KEYWORD
+ * para simplificar a estrutura. O Analisador Sintático vai diferenciar eles pelo lexema.
+ */
 typedef enum {
     TOKEN_EOF = 0,
-    TOKEN_ID,           // Identificadores (variáveis, funções)
-    TOKEN_NUM_INT,      // Números inteiros (Ex: 42)
-    TOKEN_NUM_FLOAT,    // Números reais (Ex: 3.14)
-    TOKEN_OP_REL,       // Operadores relacionais
-    TOKEN_KEYWORD       // Palavras reservadas 
+    TOKEN_ID,           
+    TOKEN_NUM_INT,      
+    TOKEN_NUM_FLOAT,    
+    TOKEN_OP_REL,       
+    TOKEN_KEYWORD       
 } TokenNome;
 
-// Sub-códigos para especificar o atributo de operadores relacionais[cite: 7]
+/*
+ * Enum para os atributos dos Operadores Relacionais.
+ * Isso permite guardar na tabela de símbolos qual operação foi feita (ex: menor que)
+ * sem precisar salvar a string (como "<=").
+ */
 typedef enum {
-    OP_LT,  // < (Less Than)
-    OP_LE,  // <= (Less or Equal)
-    OP_EQ,  // == (Equal)
-    OP_GT,  // > (Greater Than)
-    OP_GE,  // >= (Greater or Equal)
-    OP_NE   // <> (Not Equal)
+    OP_LT,  
+    OP_LE,  
+    OP_EQ,  
+    OP_GT,  
+    OP_GE,  
+    OP_NE   
 } OpRelAtributo;
 
-// Estrutura do Token com a Union de Atributos estritamente igual à Figura 2[cite: 7]
+/*
+ * Estrutura do Token, baseada na exigência do documento do projeto (Figura 2).
+ * Serve para guardar as informações do token identificado no Scanner para enviar ao Parser.
+ */
 typedef struct {
-    TokenNome type;     // Nome do token
-    int line;           // Para tratamento de erros
+    TokenNome type;     
+    int line;           
    
-    // valor do atributo
     union {
-        int table_index;        // índice para Tabela de Símbolos
-        int int_value;          // Valor literal convertido
-        double float_value;     // Valor literal convertido
-        OpRelAtributo op_code;  // operador relacional específico
+        int table_index;        
+        int int_value;          
+        double float_value;     
+        OpRelAtributo op_code;  
     } attribute;
 } Token;
 
 // ============================================================================
 // VARIÁVEIS GLOBAIS
+// Utilizamos variáveis globais para evitar a passagem constante de parâmetros
+// nas chamadas recursivas do Analisador Sintático.
 // ============================================================================
 
-char *codigo_fonte;       // Ponteiro para armazenar o código fonte carregado em memória.
-Token lookahead;          // Armazena o símbolo/token atual a ser avaliado pelo sintático[cite: 8].
-
-char lexema_atual[100];   // VARIÁVEL GLOBAL ADICIONADA: Guarda o texto do token atual para o parser preditivo.
-
-int linha_atual = 1;      // Controla a linha atual para relatórios de erro.
-int indice_leitura = 0;   // Em C, os índices de arrays/strings começam em 0.
-
-FILE *arquivo_saida;      // Ponteiro para o ficheiro onde os tokens serão guardados.
+char *codigo_fonte;       
+Token lookahead;          // Guarda o próximo token lido (Lookahead LL(1))
+char lexema_atual[100];   // Guarda a string do token que está sendo lido
+int linha_atual = 1;      // Contador de linhas para relatórios de erro
+int indice_leitura = 0;   // Posição atual da leitura na string do código-fonte
+FILE *arquivo_saida;      
 
 // ============================================================================
 // ETAPA 2: ANALISADOR LÉXICO (SCANNER)
 // ============================================================================
 
+/*
+ * Função principal do Scanner.
+ * Ela varre o texto, caractere por caractere, para montar e classificar o próximo Token.
+ * Espaços em branco e comentários são ignorados e não chegam no Analisador Sintático.
+ */
 Token obterToken() {
     Token token;
-    token.type = TOKEN_EOF; // Valor por omissão
-    lexema_atual[0] = '\0'; // Limpa o lexema global a cada nova leitura
+    token.type = TOKEN_EOF; 
+    lexema_atual[0] = '\0'; 
     char c;
 
-    // Loop principal: percorre o codigo_fonte até encontrar o fim do ficheiro ('\0')
+    // Laço de leitura do código-fonte
     while (codigo_fonte[indice_leitura] != '\0') {
         c = codigo_fonte[indice_leitura];
 
-        // 1. REMOÇÃO DE ESPAÇOS E CONTROLO DE LINHAS
+        // Ignora espaços e formatações
         if (c == ' ' || c == '\t' || c == '\r') {
             indice_leitura++;
             continue;
         }
+        
+        // Conta as linhas quando encontra o \n
         if (c == '\n') {
             linha_atual++;
             indice_leitura++;
             continue;
         }
 
-        // 2. IGNORAR COMENTÁRIOS DE LINHA (//)
+        // Ignora comentários iniciados por '//' avançando até o final da linha
         if (c == '/' && codigo_fonte[indice_leitura + 1] == '/') {
             while (codigo_fonte[indice_leitura] != '\n' && codigo_fonte[indice_leitura] != '\0') {
                 indice_leitura++;
             }
-            continue; // O '\n' será tratado na próxima iteração do while
+            continue; 
         }
 
-        token.line = linha_atual; // Regista a linha onde o token começou
+        token.line = linha_atual; 
 
-        // ==========================================================
-        // 3. MÁQUINA DE ESTADOS: RECONHECIMENTO DE TOKENS
-        // ==========================================================
+        // ----------------------------------------------------------
+        // RECONHECIMENTO DE IDENTIFICADORES E PALAVRAS RESERVADAS
+        // ----------------------------------------------------------
         
-        // --- Reconhecimento de Identificadores e Palavras Reservadas ---
+        // Se começar com letra, forma um lexema para ver se é ID ou Palavra Reservada
         if (isalpha(c)) {
             char lexema[100]; 
             int i = 0;
             
+            // Aceita letras, números e underline na formação do nome
             while (isalpha(codigo_fonte[indice_leitura]) || isdigit(codigo_fonte[indice_leitura]) || codigo_fonte[indice_leitura] == '_') {
                 if (i < 99) { 
                     lexema[i++] = codigo_fonte[indice_leitura];
@@ -107,10 +124,9 @@ Token obterToken() {
             }
             lexema[i] = '\0'; 
             
-            // Atualiza a variável global para que o Analisador Sintático possa avaliar a palavra[cite: 8]
             strcpy(lexema_atual, lexema);
             
-            // Classificação das Palavras Reservadas do Anexo I[cite: 7]
+            // Verifica na lista de palavras reservadas da linguagem MiniVisualg
             if (strcmp(lexema, "algoritmo") == 0 || strcmp(lexema, "var") == 0 || 
                 strcmp(lexema, "inicio") == 0 || strcmp(lexema, "fimalgoritmo") == 0 ||
                 strcmp(lexema, "se") == 0 || strcmp(lexema, "entao") == 0 || 
@@ -130,13 +146,17 @@ Token obterToken() {
                 
                 token.type = TOKEN_KEYWORD;
             } else {
-                token.type = TOKEN_ID;
+                token.type = TOKEN_ID; // Se não for palavra reservada, é variável (ID)
             }
             
             return token;
         }
 
-        // --- Reconhecimento de Números ---
+        // ----------------------------------------------------------
+        // RECONHECIMENTO DE NÚMEROS (INTEIROS E REAIS)
+        // ----------------------------------------------------------
+        
+        // Se começar com dígito numérico, agrupa até formar o número
         if (isdigit(codigo_fonte[indice_leitura])) {
             int i = 0;
             char lexema[100];
@@ -145,9 +165,11 @@ Token obterToken() {
             while (isdigit(codigo_fonte[indice_leitura]) && i < 99) {
                 lexema[i++] = codigo_fonte[indice_leitura++];
             }
+            
+            // Verifica se possui o caractere ponto ('.') para identificar que é um número Real (Float)
             if (codigo_fonte[indice_leitura] == '.' && isdigit(codigo_fonte[indice_leitura + 1])) {
                 numero_real = 1;
-                lexema[i++] = codigo_fonte[indice_leitura++]; // Consome o ponto
+                lexema[i++] = codigo_fonte[indice_leitura++]; 
                 while (isdigit(codigo_fonte[indice_leitura]) && i < 99) {
                     lexema[i++] = codigo_fonte[indice_leitura++];
                 }
@@ -155,6 +177,7 @@ Token obterToken() {
             lexema[i] = '\0';
             strcpy(lexema_atual, lexema);
             
+            // Salva o valor exato no atributo do Token conforme o tipo
             if (numero_real) {   
                 token.type = TOKEN_NUM_FLOAT;
                 token.attribute.float_value = atof(lexema);
@@ -166,13 +189,16 @@ Token obterToken() {
             return token;
         }
 
-        // --- Reconhecimento de Textos Literais (Strings) ---
-        // Exigido para suportar o comando escreval("Olá, mundo!") presente no Anexo I[cite: 7].
+        // ----------------------------------------------------------
+        // RECONHECIMENTO DE STRINGS LITERAIS
+        // ----------------------------------------------------------
+        
         if (c == '"') {
             int i = 0;
             char lexema[100];
-            lexema[i++] = codigo_fonte[indice_leitura++]; // Consome a aspa inicial
+            lexema[i++] = codigo_fonte[indice_leitura++]; 
             
+            // Lê tudo até encontrar o fechamento das aspas (permite acentos no texto)
             while (codigo_fonte[indice_leitura] != '"' && codigo_fonte[indice_leitura] != '\0' && codigo_fonte[indice_leitura] != '\n') {
                 if (i < 99) lexema[i++] = codigo_fonte[indice_leitura];
                 indice_leitura++;
@@ -180,16 +206,22 @@ Token obterToken() {
             
             if (codigo_fonte[indice_leitura] == '"') {
                 if (i < 99) lexema[i++] = codigo_fonte[indice_leitura];
-                indice_leitura++; // Consome a aspa final
+                indice_leitura++; 
             }
             
             lexema[i] = '\0';
             strcpy(lexema_atual, lexema);
-            token.type = TOKEN_ID; // Tratado como ID literal para simplificar as regras do Parser.
+            
+            // Classifica como ID para simplificar o tratamento no analisador sintático
+            token.type = TOKEN_ID; 
             return token;
         }
 
-        // --- Operadores Relacionais e Atribuição ---
+        // ----------------------------------------------------------
+        // LOOKAHEAD DE 1 CARACTERE PARA OPERADORES DUPLOS
+        // ----------------------------------------------------------
+        
+        // Verifica o caractere da frente para decidir se é um operador duplo (ex: >=, <-) ou simples (ex: >)
         if (c == '>') {
             if (codigo_fonte[indice_leitura + 1] == '=') {
                 token.type = TOKEN_OP_REL;
@@ -205,6 +237,7 @@ Token obterToken() {
                 return token;
             }
         } else if (c == '<') {
+            // Operador de atribuição (<-)
             if (codigo_fonte[indice_leitura + 1] == '-') {
                 token.type = TOKEN_KEYWORD; 
                 strcpy(lexema_atual, "<-");
@@ -237,21 +270,21 @@ Token obterToken() {
             return token;
         } 
         
-        // --- Símbolos de Pontuação e Operadores Aritméticos ---
-        // Essenciais para não causar "Erro Léxico" ao ler parênteses de chamadas e funções no Anexo I[cite: 7].
+        // ----------------------------------------------------------
+        // PONTUAÇÕES E OPERADORES MATEMÁTICOS SIMPLES
+        // ----------------------------------------------------------
+        
+        // Captura os caracteres que representam operadores e delimitadores
         if (c == '(' || c == ')' || c == '[' || c == ']' || c == ':' || c == ',' || 
             c == '+' || c == '-' || c == '*' || c == '/' || c == '\\' || c == '.') {
             lexema_atual[0] = c;
             lexema_atual[1] = '\0';
-            token.type = TOKEN_KEYWORD; // Tratado como Keyword sintática estrutural
+            token.type = TOKEN_KEYWORD; 
             indice_leitura++;
             return token;
         }
                    
-        // ==========================================================
-        // TRATAMENTO DE ERRO LÉXICO
-        // ==========================================================
-        // Aborda o programa conforme especificado no documento do projeto[cite: 7].
+        // Se encontrar um caractere que não faz parte da gramática, gera Erro Léxico
         printf("ERRO LÉXICO\n");
         printf("Linha: %d\n", linha_atual);
         printf("Sequência incorreta: %c\n", c);
@@ -263,13 +296,13 @@ Token obterToken() {
 
 // ============================================================================
 // ETAPA 3: ANALISADOR SINTÁTICO (PARSER)
+// O parser foi construído no modelo Descendente Recursivo LL(1).
 // ============================================================================
 
 void nextToken();
 void consome(TokenNome tokenEsperado);
 void consome_palavra(const char *palavraEsperada);
 
-// Protótipos das funções da Gramática Recursiva Preditiva[cite: 8]
 void analisa_algoritmo_principal();
 void processa_bloco_variaveis();
 void avalia_lista_comandos();
@@ -280,15 +313,19 @@ void avalia_expressao();
 void avalia_fator();
 void avalia_termo();
 void avalia_expressao_simples();
-// --- Funções Auxiliares do Sintático ---
 
+/*
+ * Função responsável por chamar o Léxico sob demanda e atualizar o lookahead.
+ * Aqui também aproveitamos para imprimir as informações e gerar o txt de saída.
+ */
 void nextToken() {
-    lookahead = obterToken(); // A variável global lexema_atual é atualizada aqui internamente[cite: 8]
+    lookahead = obterToken(); 
     
     if (lookahead.type == TOKEN_EOF) return;
 
-    static int id_counter = 0; // Contador incremental para identificadores
+    static int id_counter = 0; // Índice usado para diferenciar os Identificadores na saída
 
+    // Verificações para imprimir o relatório no formato exigido pelo projeto
     if (lookahead.type == TOKEN_KEYWORD) {
         if (isalpha(lexema_atual[0])) {
             printf("%d# PALAVRA_RESERVADA | 0\n", lookahead.line);
@@ -318,19 +355,25 @@ void nextToken() {
     }
 }
 
+/*
+ * Função "consumir" básica. Verifica se o token atual é o que a gramática espera.
+ * Se for, avança pro próximo. Se não for, acusa Erro Sintático e para.
+ */
 void consome(TokenNome tokenEsperado) {
     if (lookahead.type == tokenEsperado) {
         nextToken();
     } else {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
-        printf("Token inesperado encontrado: %s\n", lexema_atual); // Usa a global[cite: 7]
+        printf("Token inesperado encontrado: %s\n", lexema_atual); 
         exit(1);
     }
 }
 
-// Consome comparando o lexema exato guardado na variável global, resolvendo o problema de 
-// ambiguidade sem alterar a struct Token[cite: 8].
+/*
+ * Função "consumir" para palavras exatas.
+ * Usada para checar palavras reservadas específicas (como "inicio", "se", "fimalgoritmo").
+ */
 void consome_palavra(const char *palavraEsperada) {
     if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, palavraEsperada) == 0) {
         nextToken();
@@ -342,12 +385,19 @@ void consome_palavra(const char *palavraEsperada) {
     }
 }
 
-// --- Funções Recursivas (Não-Terminais da Gramática) ---
+// ============================================================================
+// ANÁLISE SINTÁTICA DE BLOCOS E ESTRUTURAS
+// ============================================================================
 
+/*
+ * Função raiz do Analisador Sintático.
+ * Verifica a estrutura inicial obrigatória do arquivo (algoritmo -> variáveis -> comandos).
+ */
 void analisa_algoritmo_principal() {
     consome_palavra("algoritmo");
-    consome(TOKEN_ID); // Nome do algoritmo
+    consome(TOKEN_ID); 
 
+    // Lê todas as declarações de variáveis (var) e funções/procedimentos misturadas antes do início
     while (lookahead.type == TOKEN_KEYWORD && 
           (strcmp(lexema_atual, "var") == 0 || strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
         if (strcmp(lexema_atual, "var") == 0) {
@@ -358,22 +408,24 @@ void analisa_algoritmo_principal() {
     }
 
     consome_palavra("inicio");
-
     avalia_lista_comandos();
-
     consome_palavra("fimalgoritmo");
 }
 
+/*
+ * Faz a análise sintática do bloco 'var' onde se criam as variáveis.
+ */
 void processa_bloco_variaveis() {
     if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "var") == 0) {
         consome_palavra("var");
 
+        // Continua lendo enquanto encontrar nomes de variáveis
         while (lookahead.type == TOKEN_ID) {
-
+            
+            // Aceita a declaração de múltiplas variáveis na mesma linha (ex: a, b: inteiro)
             while (1) 
             {
                 consome(TOKEN_ID); 
-
                 if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0)
                 {
                     consome_palavra(",");
@@ -385,11 +437,10 @@ void processa_bloco_variaveis() {
             }
             consome_palavra(":");
 
+            // Verifica se é a declaração de um array (vetor) e seus índices (ex: vetor[1..10])
             if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "vetor") == 0) {
-
                 consome_palavra("vetor");
                 consome_palavra("[");
-
     
                 if (lookahead.type == TOKEN_NUM_INT)
                 {
@@ -415,7 +466,6 @@ void processa_bloco_variaveis() {
                 consome_palavra("]");
                 consome_palavra("de");
 
-
                 if (lookahead.type == TOKEN_KEYWORD && (
                     strcmp(lexema_atual, "inteiro") == 0 ||
                     strcmp(lexema_atual, "real") == 0 ||
@@ -440,6 +490,7 @@ void processa_bloco_variaveis() {
                 strcmp(lexema_atual, "caractere") == 0 ||
                 strcmp(lexema_atual, "logico") == 0)) {
                 
+                // Consome os tipos de dados simples
                 consome_palavra(lexema_atual);
 
             } 
@@ -454,8 +505,12 @@ void processa_bloco_variaveis() {
     }
 }
 
+/*
+ * Lê as instruções dentro dos blocos (como inicio ... fimalgoritmo).
+ * Analisa o lookahead para saber qual função do parser chamar em seguida.
+ */
 void avalia_lista_comandos() {
-    // O loop contínuo que avalia qual a próxima instrução baseada no lookahead preditivo[cite: 8].
+    // Fica no loop analisando comandos enquanto encontrar identificadores ou comandos-chave
     while (lookahead.type == TOKEN_ID || (lookahead.type == TOKEN_KEYWORD &&
             (strcmp(lexema_atual, "se") == 0 ||
               strcmp(lexema_atual, "enquanto") == 0 ||
@@ -466,54 +521,45 @@ void avalia_lista_comandos() {
               strcmp(lexema_atual, "retorne") == 0
           ))) {
         
-        // 1. Comando Condicional
         if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "se") == 0) {
             avalia_comando_condicional();
         }
-        
-        // 2. Comandos de Repetição
         else if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "enquanto") == 0 || strcmp(lexema_atual, "para") == 0)) {
             avalia_comando_repeticao();
         }
-        
-        // Comando Retorne
         else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "retorne") == 0) {
             consome_palavra("retorne");
             avalia_expressao();
         }
-        
-        // 3. Comandos de Entrada e Saída (I/O)
+        // Comandos de leitura e escrita (I/O)
         else if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "escreva") == 0 || strcmp(lexema_atual, "escreval") == 0 || strcmp(lexema_atual, "leia") == 0)) {
-            // Guarda qual o comando antes de avançar
+            
             char comando[100];
             strcpy(comando, lexema_atual);
             
-            consome_palavra(comando); // Consome a palavra específica[cite: 7].
-            consome_palavra("(");     // Consome o parêntese obrigatório[cite: 7].
+            consome_palavra(comando); 
+            consome_palavra("(");     
             
-            avalia_expressao();       // Chamada da função para analisar a expressão
+            avalia_expressao();       
             
-            // Permite múltiplos argumentos separados por vírgula
+            // Permite passagem de várias variáveis/expressões separadas por vírgula
             while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0) {
                 consome_palavra(",");
                 avalia_expressao();
             }
-            
-            consome_palavra(")");     // Consome o fecho do parêntese[cite: 7].
+            consome_palavra(")");     
         }
-        
-        // 4. Atribuição de Variável ou Chamada de Procedimento
+        // Tratamento de Identificadores (atribuições de variáveis, índices de vetor ou chamadas de função)
         else if (lookahead.type == TOKEN_ID) {
             consome(TOKEN_ID); 
             
-            // Pode ser um acesso a vetor: nomes[1]
+            // Acessando posição do vetor
             if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
                 consome_palavra("[");
                 avalia_expressao();
                 consome_palavra("]");
             }
-            
-            // Pode ser chamada de procedimento: mostrar_erro("teste")
+            // Passando parâmetros para funções
             else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
                 consome_palavra("(");
                 if (lookahead.type != TOKEN_KEYWORD || strcmp(lexema_atual, ")") != 0) {
@@ -526,91 +572,68 @@ void avalia_lista_comandos() {
                 consome_palavra(")");
             }
             
-            // Verifica se o símbolo seguinte é a seta de atribuição (<-)
+            // Verifica o símbolo de atribuição para receber um valor
             if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "<-") == 0) {
                 consome_palavra("<-");
-                avalia_expressao();   // Avalia o cálculo[cite: 8]
+                avalia_expressao();   
             }
         }
     }
 }
 
+/*
+ * Análise Sintática do bloco IF e ELSE.
+ */
 void avalia_comando_condicional() {
-    // Consome a palavra reservada inicial da estrutura de controle
     consome_palavra("se");
-
-    // Consome o parêntese que abre a expressão lógica
     consome_palavra("(");
-
-    // Avalia a expressão/condição que fica dentro dos parênteses
     avalia_expressao(); 
-
-    // Consome o parêntese que fecha a expressão lógica
     consome_palavra(")");
-
-    // Consome a palavra reservada "entao", que indica o início do bloco verdadeiro
     consome_palavra("entao");
 
-    // Avalia os comandos dentro do bloco "se"
     avalia_lista_comandos();
 
-    // Verificação (Fatoração à esquerda): O bloco 'senao' é opcional.
-    // Olhamos para o próximo token para ver se a cláusula 'senao' existe
+    // Como o 'senao' é opcional na linguagem, testamos se ele aparece no lookahead
     if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "senao") == 0) {
         consome_palavra("senao");
-
-        // Avalia os comandos dentro do bloco "senao"
         avalia_lista_comandos();
     }
 
-    // Consome a palavra reservada "fimse" encerrando a estrutura condicional
     consome_palavra("fimse");
 }
 
+/*
+ * Análise Sintática dos laços 'enquanto' e 'para'.
+ */
 void avalia_comando_repeticao() {
     if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "enquanto") == 0) {
         consome_palavra("enquanto");
-
-        // A condição do enquanto está sempre entre parênteses no MiniVisualg
         consome_palavra("(");
         avalia_expressao(); 
         consome_palavra(")");
-
         consome_palavra("faca");
-
-        // Avalia as instruções dentro do laço
         avalia_lista_comandos();
-
         consome_palavra("fimenquanto");
     } 
-    // 2. Estrutura: para ID de expressão ate expressão [passo expressão] faca ... fimpara
     else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "para") == 0) {
         consome_palavra("para");
-
-        // Consome a variável de controlo do laço (ex: 'i')
         consome(TOKEN_ID); 
-
         consome_palavra("de");
-        avalia_expressao(); // Avalia o valor inicial da contagem
+        avalia_expressao(); 
 
         consome_palavra("ate");
-        avalia_expressao(); // Avalia o valor limite da contagem
+        avalia_expressao(); 
 
-        // Verificação do "passo": Como visto no algoritmo "ContagemRegressiva", o passo é opcional.
-        // O algoritmo "ContagemSimples" omite o passo, logo precisamos de verificar se ele existe.
+        // Lê o "passo" do laço Para, que é opcional na sintaxe do Visualg
         if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "passo") == 0) {
             consome_palavra("passo");
-            avalia_expressao(); // Avalia o valor do incremento/decremento
+            avalia_expressao(); 
         }
 
         consome_palavra("faca");
-
-        // Avalia as instruções dentro do laço
         avalia_lista_comandos();
-
         consome_palavra("fimpara");
     }
-    // Tratamento de segurança, caso a função seja chamada indevidamente
     else {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
@@ -619,36 +642,19 @@ void avalia_comando_repeticao() {
     }
 }
 
+/*
+ * Análise Sintática da declaração de Funções e Procedimentos.
+ * Lê a assinatura (nome, parâmetros e o tipo dos parâmetros).
+ */
 void analisa_subrotinas() {
-    // Avalia continuamente se existem sub-rotinas declaradas
     while (lookahead.type == TOKEN_KEYWORD && 
           (strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
         
         if (strcmp(lexema_atual, "procedimento") == 0) {
             consome_palavra("procedimento");
-            consome(TOKEN_ID); // Nome do procedimento
+            consome(TOKEN_ID); 
             
-            // Avalia parâmetros opcionais[cite: 6]
-            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
-                consome_palavra("(");
-                do {
-                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
-                    consome(TOKEN_ID);
-                    consome_palavra(":");
-                    consome(TOKEN_KEYWORD); // Tipo da variável (inteiro, caractere, etc.)
-                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
-                consome_palavra(")");
-            }
-            
-            consome_palavra("inicio");
-            avalia_lista_comandos();
-            consome_palavra("fimprocedimento"); // Estrutura exigida pelo Anexo I[cite: 6]
-            
-        } else if (strcmp(lexema_atual, "funcao") == 0) {
-            consome_palavra("funcao");
-            consome(TOKEN_ID); // Nome da função
-            
-            // Avalia parâmetros
+            // Trata a entrada de parâmetros (ex: (a: inteiro, b: real))
             if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
                 consome_palavra("(");
                 do {
@@ -660,39 +666,68 @@ void analisa_subrotinas() {
                 consome_palavra(")");
             }
             
-            // Funções obrigam à definição do tipo de retorno[cite: 6]
+            consome_palavra("inicio");
+            avalia_lista_comandos();
+            consome_palavra("fimprocedimento"); 
+            
+        } else if (strcmp(lexema_atual, "funcao") == 0) {
+            consome_palavra("funcao");
+            consome(TOKEN_ID); 
+            
+            // Trata a entrada de parâmetros na função
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                do {
+                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
+                    consome(TOKEN_ID);
+                    consome_palavra(":");
+                    consome(TOKEN_KEYWORD); 
+                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
+                consome_palavra(")");
+            }
+            
+            // Consome o tipo de retorno da função
             consome_palavra(":");
-            consome(TOKEN_KEYWORD); // Tipo de retorno
+            consome(TOKEN_KEYWORD); 
             
             consome_palavra("inicio");
             avalia_lista_comandos();
-            consome_palavra("fimfuncao"); // Estrutura exigida pelo Anexo I[cite: 6]
+            consome_palavra("fimfuncao"); 
         }
     }
 }
 
+// ============================================================================
+// AVALIAÇÃO DE EXPRESSÕES E PRECEDÊNCIA MATEMÁTICA
+// A gramática exige avaliar as expressões seguindo a hierarquia correta:
+// Parênteses > Multiplicação/Divisão > Soma/Subtração > Operadores Relacionais
+// ============================================================================
 
-
-// Nível 4: Elementos base (Variáveis, Números, Parênteses e Booleanos)
+/*
+ * Base da expressão (Fator).
+ * Consome números, variáveis e resolve chamadas com parênteses isolados.
+ */
 void avalia_fator() {
-    // Suporte para sinal unário (ex: passo -2)
+    // Trata sinais negativos ou positivos acompanhando um número
     if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "-") == 0 || strcmp(lexema_atual, "+") == 0)) {
         char op[10];
         strcpy(op, lexema_atual);
         consome_palavra(op);
-        avalia_fator(); // recursivamente avalia o fator após o sinal
+        avalia_fator(); 
         return;
     }
 
+    // Se for variável ou função
     if (lookahead.type == TOKEN_ID) {
         consome(TOKEN_ID);
-        // Lida com índices de vetores (ex: notas[i])
+        
+        // Trata posição de vetor
         if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
             consome_palavra("[");
             avalia_expressao();
             consome_palavra("]");
         } 
-        // Lida com chamadas de função com múltiplos parâmetros (ex: somar(a, b))
+        // Trata chamada de parâmetros da função
         else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
             consome_palavra("(");
             if (lookahead.type != TOKEN_KEYWORD || strcmp(lexema_atual, ")") != 0) {
@@ -709,11 +744,10 @@ void avalia_fator() {
     } else if (lookahead.type == TOKEN_NUM_FLOAT) {
         consome(TOKEN_NUM_FLOAT);
     } else if (lookahead.type == TOKEN_KEYWORD && (strcmp(lexema_atual, "verdadeiro") == 0 || strcmp(lexema_atual, "falso") == 0)) {
-        // Constantes lógicas suportadas[cite: 6]
         if (strcmp(lexema_atual, "verdadeiro") == 0) consome_palavra("verdadeiro");
         else consome_palavra("falso");
     } else if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
-        // Resolve prioridade forçada por parênteses matemáticos[cite: 7]
+        // Encontrou um parêntese, então chama avalia_expressao para resolver o que tem dentro com prioridade
         consome_palavra("(");
         avalia_expressao();
         consome_palavra(")");
@@ -725,10 +759,14 @@ void avalia_fator() {
     }
 }
 
-// Nível 3: Multiplicação, Divisão e Operadores Lógicos E/MOD
+/*
+ * Resolve multiplicações e divisões (Termo).
+ * Tem precedência sobre somas e subtrações.
+ */
 void avalia_termo() {
     avalia_fator();
-    // Operadores de alta prioridade[cite: 6]
+    
+    // Agrupa e resolve as operações multiplicativas sucessivas
     while (lookahead.type == TOKEN_KEYWORD && 
           (strcmp(lexema_atual, "*") == 0 || strcmp(lexema_atual, "/") == 0 || 
            strcmp(lexema_atual, "\\") == 0 || strcmp(lexema_atual, "MOD") == 0 || 
@@ -741,10 +779,13 @@ void avalia_termo() {
     }
 }
 
-// Nível 2: Soma, Subtração e Operador Lógico OU
+/*
+ * Resolve somas e subtrações (Expressão Simples).
+ */
 void avalia_expressao_simples() {
     avalia_termo();
-    // Operadores de baixa prioridade matemática[cite: 6]
+    
+    // Resolve as operações aditivas sucessivas
     while (lookahead.type == TOKEN_KEYWORD && 
           (strcmp(lexema_atual, "+") == 0 || strcmp(lexema_atual, "-") == 0 || 
            strcmp(lexema_atual, "OU") == 0)) {
@@ -756,36 +797,39 @@ void avalia_expressao_simples() {
     }
 }
 
-// Nível 1 (Principal): Comparações Relacionais (>, <, =, <>)
+/*
+ * Porta de entrada da validação matemática e lógica.
+ * Verifica a presença de operadores relacionais (como >, <, =) ligando duas expressões simples.
+ */
 void avalia_expressao() {
     avalia_expressao_simples();
     
-    // Verifica se o símbolo atual é um operador relacional do enum (TOKEN_OP_REL)[cite: 6]
     if (lookahead.type == TOKEN_OP_REL) {
         consome(TOKEN_OP_REL); 
         avalia_expressao_simples();
     }
 }
+
 // ============================================================================
-// MAIN: PONTO DE ENTRADA E LEITURA DO FICHEIRO
+// FUNÇÃO PRINCIPAL (MAIN)
 // ============================================================================
 
 int main(int argc, char *argv[]) {
-    // 1. Verificação dos argumentos da linha de comandos
+    // Verifica se o arquivo fonte foi passado como parâmetro na execução do terminal
     if (argc < 2) {
         printf("Erro: Ficheiro fonte nao informado.\n");
         printf("Uso: %s <nome_do_arquivo.txt>\n", argv[0]);
         return 1;
     }
 
-    // 2. Abrir o ficheiro fonte
     FILE *arquivo_fonte = fopen(argv[1], "r");
     if (arquivo_fonte == NULL) {
         printf("Erro: Nao foi possivel abrir o ficheiro %s\n", argv[1]);
         return 1;
     }
 
-    // 3. Alocar memória e carregar o ficheiro para o 'codigo_fonte'
+    // Calcula a quantidade de caracteres do arquivo para alocar exatamente 
+    // a memória necessária, evitando leitura fora do limite (buffer overflow).
     fseek(arquivo_fonte, 0, SEEK_END);
     long tamanho_ficheiro = ftell(arquivo_fonte);
     rewind(arquivo_fonte);
@@ -797,24 +841,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Passa todo o texto para a string global e fecha o arquivo original
     size_t lidos = fread(codigo_fonte, sizeof(char), tamanho_ficheiro, arquivo_fonte);
-    codigo_fonte[lidos] = '\0'; // Garante o fim da string
+    codigo_fonte[lidos] = '\0'; 
     fclose(arquivo_fonte);
 
-    // 4. Preparar ficheiro de saída
     arquivo_saida = fopen("saida_tokens.txt", "w");
 
-    // ========================================================================
-    // TESTE DA ETAPA 3 (ANALISADOR SINTÁTICO ATIVADO)
-    // ========================================================================
-    
-    // Inicializa a variável lookahead com o primeiro token do arquivo[cite: 8]
+    // Dá o pontapé inicial: carrega o primeiro token e chama o analisador sintático
     nextToken(); 
-    
-    // Inicia a análise descendente pela regra principal da gramática[cite: 8]
     analisa_algoritmo_principal();
     
-    // Verifica se realmente chegou ao final do arquivo
+    // Verificação de erro para código sujo digitado após a tag "fimalgoritmo".
+    // Se o lookahead não for o fim do arquivo (EOF), levanta Erro Sintático.
     if (lookahead.type != TOKEN_EOF) {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
@@ -824,7 +863,6 @@ int main(int argc, char *argv[]) {
     
     printf("Compilação concluída com sucesso. Código sintaticamente correto!\n");
 
-    // Limpeza de memória e fecho de ficheiros
     free(codigo_fonte);
     if (arquivo_saida != NULL) fclose(arquivo_saida);
 
