@@ -34,10 +34,6 @@ gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
 
 Para rodar, chame o executável recém gerado passando o nome do arquivo que contém o algoritmo que deseja validar:
 ```bash
-# Se utilizar Windows:
-.\compilador.exe arquivo_de_exemplo.txt
-
-# Se utilizar Mac / Linux:
 ./compilador arquivo_de_exemplo.txt
 ```
 O console acusará erro sintático (com a linha e o contexto do erro) caso a linguagem seja violada, ou exibirá "Compilação concluída com sucesso". 
