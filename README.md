@@ -61,5 +61,7 @@ A função `obterToken()` age como uma máquina de estados que lê o código-fon
 
 ## 👥 Alunos
 Guilherme Limeira de Souza RA: 10437877
+
 Gustavo Kiyoshi Ikeda RA: 10439179
+
 Pedro Montarroyos de Pinho. RA: 10440213
