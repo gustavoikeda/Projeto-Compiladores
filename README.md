@@ -60,7 +60,7 @@ A função `obterToken()` age como uma máquina de estados que lê o código-fon
 * **EOF Lock:** Após todo o código ser validado e o `fimalgoritmo` consumido na `main()`, o sistema faz uma checagem final obrigatória de `EOF` (Fim de Arquivo), barrando qualquer código "sujo" que o usuário possa ter digitado ao final do arquivo de texto.
 
 ## 👥 Alunos
-Guilherme Limeira de Souza RA: 10437877
+Guilherme Limeira de Souza RA: 10439777
 
 Gustavo Kiyoshi Ikeda RA: 10439179
 
