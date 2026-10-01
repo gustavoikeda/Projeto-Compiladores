@@ -342,30 +342,42 @@ void nextToken() {
     static int id_counter = 0; 
 
     // Bateria de if/elses para imprimir no formato "<linha># <token> | <atributo>" exigido
-    if (lookahead.type == TOKEN_KEYWORD) {
-        if (isalpha(lexema_atual[0])) { // Se a keyword começar com letra, é uma palavra reservada
+    if (lookahead.type == TOKEN_KEYWORD) 
+    {
+        if (isalpha(lexema_atual[0])) 
+        { // Se a keyword começar com letra, é uma palavra reservada
             printf("%d# PALAVRA_RESERVADA | 0\n", lookahead.line);
             if (arquivo_saida) fprintf(arquivo_saida, "%d# PALAVRA_RESERVADA | 0\n", lookahead.line);
-        } else {
-            if (strcmp(lexema_atual, "<-") == 0) { // Símbolo especial de atribuição
+        } 
+        else 
+        {
+            if (strcmp(lexema_atual, "<-") == 0) 
+            { // Símbolo especial de atribuição
                 printf("%d# OPERADOR_ATRIBUICAO | 0\n", lookahead.line);
                 if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_ATRIBUICAO | 0\n", lookahead.line);
-            } else { // Outros símbolos unitários (+, - , *, (, )) são tratados como delimitadores/operadores matemáticos
+            } 
+            else
+            { // Outros símbolos unitários (+, - , *, (, )) são tratados como delimitadores/operadores matemáticos
                 printf("%d# OPERADOR_DELIMITADOR | %d\n", lookahead.line, lexema_atual[0]);
                 if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_DELIMITADOR | %d\n", lookahead.line, lexema_atual[0]);
             }
         }
-    } else if (lookahead.type == TOKEN_ID) {
+    } 
+    else if (lookahead.type == TOKEN_ID) 
+    {
         printf("%d# IDENTIFICADOR | %d\n", lookahead.line, id_counter);
         if (arquivo_saida) fprintf(arquivo_saida, "%d# IDENTIFICADOR | %d\n", lookahead.line, id_counter);
         id_counter++; // Incrementa o contador de IDs toda vez que encontra um
-    } else if (lookahead.type == TOKEN_NUM_INT) {
+    } 
+    else if (lookahead.type == TOKEN_NUM_INT) {
         printf("%d# NUMERO_INTEIRO | %d\n", lookahead.line, lookahead.attribute.int_value);
         if (arquivo_saida) fprintf(arquivo_saida, "%d# NUMERO_INTEIRO | %d\n", lookahead.line, lookahead.attribute.int_value);
-    } else if (lookahead.type == TOKEN_NUM_FLOAT) {
+    } 
+    else if (lookahead.type == TOKEN_NUM_FLOAT) {
         printf("%d# NUMERO_REAL | %g\n", lookahead.line, lookahead.attribute.float_value); // %g omite os zeros inúteis do float
         if (arquivo_saida) fprintf(arquivo_saida, "%d# NUMERO_REAL | %g\n", lookahead.line, lookahead.attribute.float_value);
-    } else if (lookahead.type == TOKEN_OP_REL) {
+    } 
+    else if (lookahead.type == TOKEN_OP_REL) {
         printf("%d# OPERADOR_RELACIONAL | %d\n", lookahead.line, lookahead.attribute.op_code);
         if (arquivo_saida) fprintf(arquivo_saida, "%d# OPERADOR_RELACIONAL | %d\n", lookahead.line, lookahead.attribute.op_code);
     }
