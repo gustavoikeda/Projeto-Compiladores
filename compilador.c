@@ -1,3 +1,9 @@
+/*Guilherme Limeira de Souza   RA: 10439777
+Gustavo Kiyoshi Ikeda        RA: 10439179
+Pedro Montarroyos de Pinho   RA: 10440213
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
