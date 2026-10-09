@@ -1,0 +1,101 @@
+=====================================================================
+                    GRAMÁTICA DA LINGUAGEM MINIVISUALG
+=====================================================================
+Guilherme Limeira de Souza   RA: 10439777
+Gustavo Kiyoshi Ikeda        RA: 10439179
+Pedro Montarroyos de Pinho   RA: 10440213
+
+
+=====================================================================
+ 1. EXPRESSÕES REGULARES (ANÁLISE LÉXICA)
+=====================================================================
+
+letra       = [A-Za-z]
+digito      = [0-9]
+
+ID          = letra (letra | digito | _)*
+NUM_INT     = digito+
+NUM_REAL    = digito+ \. digito+
+STRING      = " [^"\n]* "
+OP_REL      = < | <= | = | > | >= | <>
+ATRIB       = <-
+OP_ARIT     = \+ | - | \* | / | \\
+DELIM       = \( | \) | \[ | \] | : | , | \.
+ESPACO      = ( | \t | \r | \n)+              (descartado)
+COMENTARIO  = // [^\n]*                         (descartado)
+
+Palavras reservadas:
+  algoritmo var inicio fimalgoritmo se entao senao fimse
+  enquanto faca fimenquanto para de ate passo fimpara
+  escreva escreval leia inteiro real caractere logico vetor
+  procedimento fimprocedimento funcao retorne fimfuncao
+  verdadeiro falso MOD E OU
+
+
+=====================================================================
+ 2. GRAMÁTICA LIVRE DE CONTEXTO (ANÁLISE SINTÁTICA)
+=====================================================================
+
+G = (V, T, P, S), com S = <programa>
+T = palavras reservadas, ID, NUM_INT, NUM_REAL, STRING, OP_REL,
+    <-, +, -, *, /, \, (, ), [, ], :, ",", .
+ε = cadeia vazia
+
+<programa>      ::= algoritmo <nome> <declaracoes> inicio <comandos> fimalgoritmo
+<nome>          ::= ID | STRING
+
+<declaracoes>   ::= <declaracao> <declaracoes> | ε
+<declaracao>    ::= <decl_var> | <procedimento> | <funcao>
+
+<decl_var>      ::= var <lista_decl>
+<lista_decl>    ::= <decl> <lista_decl> | ε
+<decl>          ::= <lista_ids> : <tipo_decl>
+<lista_ids>     ::= ID <mais_ids>
+<mais_ids>      ::= , ID <mais_ids> | ε
+<tipo_decl>     ::= <tipo> | vetor [ <limite> . . <limite> ] de <tipo>
+<limite>        ::= NUM_INT | ID
+<tipo>          ::= inteiro | real | caractere | logico
+
+<procedimento>  ::= procedimento ID <params_opc> inicio <comandos> fimprocedimento
+<funcao>        ::= funcao ID <params_opc> : <tipo> inicio <comandos> fimfuncao
+<params_opc>    ::= ( <params> ) | ε
+<params>        ::= <param> <mais_params>
+<mais_params>   ::= , <param> <mais_params> | ε
+<param>         ::= ID : <tipo>
+
+<comandos>      ::= <comando> <comandos> | ε
+<comando>       ::= <cmd_se> | <cmd_enquanto> | <cmd_para> | <cmd_es>
+                  | retorne <expressao> | <cmd_id>
+
+<cmd_se>        ::= se ( <expressao> ) entao <comandos> <senao_opc> fimse
+<senao_opc>     ::= senao <comandos> | ε
+<cmd_enquanto>  ::= enquanto ( <expressao> ) faca <comandos> fimenquanto
+<cmd_para>      ::= para ID de <expressao> ate <expressao> <passo_opc>
+                    faca <comandos> fimpara
+<passo_opc>     ::= passo <expressao> | ε
+<cmd_es>        ::= <op_es> ( <argumentos> )
+<op_es>         ::= escreva | escreval | leia
+<cmd_id>        ::= ID <sufixo> <atrib_opc>
+<atrib_opc>     ::= <- <expressao> | ε
+
+<sufixo>        ::= [ <expressao> ] | ( <args_opc> ) | ε
+<args_opc>      ::= <argumentos> | ε
+<argumentos>    ::= <expressao> <mais_args>
+<mais_args>     ::= , <expressao> <mais_args> | ε
+
+<expressao>     ::= <expr_simples> <rel_opc>
+<rel_opc>       ::= OP_REL <expr_simples> | ε
+
+<expr_simples>  ::= <termo> <mais_termos>
+<mais_termos>   ::= <op_ad> <termo> <mais_termos> | ε
+<op_ad>         ::= + | - | OU
+
+<termo>         ::= <fator> <mais_fatores>
+<mais_fatores>  ::= <op_mul> <fator> <mais_fatores> | ε
+<op_mul>        ::= * | / | \ | MOD | E
+
+<fator>         ::= - <fator> | + <fator>
+                  | ID <sufixo>
+                  | NUM_INT | NUM_REAL | STRING
+                  | verdadeiro | falso
+                  | ( <expressao> )
