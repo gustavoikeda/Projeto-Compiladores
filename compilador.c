@@ -436,7 +436,7 @@ void consome_tipo() {
     } else {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
-        printf("Esperado um tipo de dado (inteiro, real, caractere, logico), mas encontrado '%s'\n", lexema_atual);
+        printf("Esperado um tipo de dado, mas encontrado '%s'\n", lexema_atual);
         exit(1);
     }
 }
