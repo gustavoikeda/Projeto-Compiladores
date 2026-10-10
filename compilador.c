@@ -321,6 +321,7 @@ Token obterToken() {
 void nextToken();
 void consome(TokenNome tokenEsperado);
 void consome_palavra(const char *palavraEsperada);
+void consome_tipo();
 
 void analisa_algoritmo_principal();
 void processa_bloco_variaveis();
@@ -417,6 +418,25 @@ void consome_palavra(const char *palavraEsperada) {
         printf("ERRO SINTÁTICO\n");
         printf("Linha: %d\n", lookahead.line);
         printf("Esperado '%s', mas encontrado '%s'\n", palavraEsperada, lexema_atual);
+        exit(1);
+    }
+}
+
+/*
+ * Consome apenas tipos de dados válidos (inteiro, real, caractere, logico).
+ * Qualquer outra palavra reservada, símbolo ou identificador gera erro sintático.
+ */
+void consome_tipo() {
+    if (lookahead.type == TOKEN_KEYWORD && (
+        strcmp(lexema_atual, "inteiro") == 0 ||
+        strcmp(lexema_atual, "real") == 0 ||
+        strcmp(lexema_atual, "caractere") == 0 ||
+        strcmp(lexema_atual, "logico") == 0)) {
+        nextToken();
+    } else {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Esperado um tipo de dado (inteiro, real, caractere, logico), mas encontrado '%s'\n", lexema_atual);
         exit(1);
     }
 }
@@ -719,7 +739,7 @@ void analisa_subrotinas() {
                     if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
                     consome(TOKEN_ID);
                     consome_palavra(":");
-                    consome(TOKEN_KEYWORD); // O tipo do dado esperado
+                    consome_tipo(); // O tipo do dado esperado
                 } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0); // Repete o 'do' se encontrar outra vírgula
                 consome_palavra(")");
             }
@@ -741,14 +761,14 @@ void analisa_subrotinas() {
                     if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
                     consome(TOKEN_ID);
                     consome_palavra(":");
-                    consome(TOKEN_KEYWORD); 
+                    consome_tipo(); 
                 } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
                 consome_palavra(")");
             }
             
             // Ao contrário dos Procedimentos, aqui obrigatoriamente declaramos o tipo que a Função vai retornar
             consome_palavra(":");
-            consome(TOKEN_KEYWORD); 
+            consome_tipo(); 
             
             consome_palavra("inicio");
             avalia_lista_comandos();
