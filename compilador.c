@@ -38,7 +38,41 @@
  *   [MEPA] -> trecho que gera o código intermediário
  *
  * Saídas: saida_tokens.txt (tokens, como na Fase 1) e saida_mepa.txt (código MEPA).
+ *
+ * ---------------------------------------------------------------------------
+ * ORGANIZAÇÃO DO ARQUIVO
+ * ---------------------------------------------------------------------------
+ * As funções aparecem na ordem em que a compilação acontece: primeiro a main,
+ * depois o léxico, o sintático (que comanda tudo), o semântico e o gerador.
+ * Como o sintático chama funções definidas mais adiante no arquivo, todas têm
+ * protótipo na Parte 2, que também serve de índice.
+ *
+ * MAPA DO ARQUIVO
+ *   PARTE 1  Estruturas de dados e variáveis globais
+ *   PARTE 2  Índice de todas as funções (protótipos com uma linha cada)
+ *   PARTE 3  main ........................ comece por aqui
+ *   PARTE 4  Léxico (obterToken)
+ *   PARTE 5  Ponte léxico -> sintático (nextToken, consome)
+ *   PARTE 6  Sintático: programa, declarações, sub-rotinas e comandos
+ *   PARTE 7  Sintático: expressões (onde os tipos são calculados)
+ *   PARTE 8  Semântico (a): erros e conversão de tipos
+ *   PARTE 9  Semântico (b): tabela de símbolos (pilha de escopos)
+ *   PARTE 10 Semântico (c): as regras R1-R9
+ *   PARTE 11 Gerador de código MEPA
+ *
+ * Quem chama quem:
+ *   main -> PARSER (partes 6-7) --+--> LÉXICO     (partes 4-5)  'me dê o próximo token'
+ *                                 +--> SEMÂNTICO  (partes 8-10) 'isto é permitido?'
+ *                                 +--> GERADOR    (parte 11)    'escreva esta instrução'
  */
+
+
+// ============================================================================
+// PARTE 1: ESTRUTURAS DE DADOS E VARIÁVEIS GLOBAIS
+// ============================================================================
+// Tudo o que as outras partes compartilham: tokens, TipoDado, Categoria,
+// TNo (uma linha da tabela de símbolos), TEscopo (uma tabela) e as globais.
+// ============================================================================
 
 
 #include <stdio.h>
@@ -47,7 +81,7 @@
 #include <ctype.h>
 
 // ============================================================================
-// ETAPA 1: DEFINIÇÕES LÉXICAS E ESTRUTURAS DE DADOS
+// FASE 1: TOKENS (O QUE O LÉXICO ENTREGA AO SINTÁTICO)
 // ============================================================================
 
 /*
@@ -175,16 +209,215 @@ int linha_atual = 1;      // Contador de linhas, sempre começa na linha 1
 int indice_leitura = 0;   // Índice que marca em qual caractere do código_fonte estamos lendo no momento
 FILE *arquivo_saida;      // Ponteiro para o arquivo "saida_tokens.txt" onde o resultado será gravado
 
-// --- Fase 2 ---
+// --- Fase 2: tabela de símbolos, sub-rotina atual e saída MEPA ---
 TEscopo *topo_escopo = NULL;  // topo da pilha de tabelas de símbolos
 TNo *rotina_atual = NULL;     // sub-rotina sendo analisada (NULL no programa principal); usada no 'retorne' [R9]
 FILE *arquivo_mepa = NULL;    // arquivo .txt com o código MEPA gerado
 int contador_rotulos = 0;     // último rótulo entregue por proximo_rotulo()
 
+// --- Fase 2: gerador de código MEPA ---
+// Formato do arquivo saida_mepa.txt:
+//   - uma instrução por linha, com 4 espaços na frente:   "    CRVL x"
+//   - rótulos na coluna 0, seguidos da instrução:          "L3: NADA"
+//   - variáveis referenciadas pelo NOME (exigência do enunciado)
+// Instruções cuja forma depende da MEPA da disciplina (confirmar com o professor):
+//   DIVF (divisão real), MODI (resto), CRCT com real ou texto, CRVI/ARMI (vetor),
+//   e a convenção de chamada de rotinas (ENPR / CHPR / RTPR).
 // ============================================================================
-// ETAPA 2: ANALISADOR LÉXICO (SCANNER)
+#define TAM_BUFFER_PASSO 4096
+
+int gravando_passo = 0;                    // 1 enquanto o código do 'passo' é guardado
+char buffer_passo[TAM_BUFFER_PASSO];       // código do 'passo', escrito depois do corpo do 'para'
+int total_memoria_global = 0;              // posições reservadas com AMEM (liberadas com DMEM no fim)
+int rotulo_saida_rotina = 0;               // rótulo de saída da sub-rotina atual (usado no 'retorne')
+
+
+// ============================================================================
+// PARTE 2: ÍNDICE DE FUNÇÕES
+// ============================================================================
+// Os protótipos permitem que as funções apareçam em qualquer ordem no
+// arquivo. Use esta lista como sumário: cada uma tem uma linha dizendo o que faz.
 // ============================================================================
 
+// PARTE 3: MAIN: O PONTO DE PARTIDA
+// int main(int argc, char *argv[])  -> ponto de entrada: abre o fonte, chama o parser e fecha as saídas (não precisa de protótipo)
+
+// PARTE 4: ANALISADOR LÉXICO (Fase 1)
+Token obterToken();  // lê o próximo token do código-fonte (o autômato léxico)
+
+// PARTE 5: PONTE ENTRE LÉXICO E SINTÁTICO
+void nextToken();                                   // pede o próximo token ao léxico e o grava em saida_tokens.txt
+void consome(TokenNome tokenEsperado);              // exige um token de um tipo e avança
+void consome_palavra(const char *palavraEsperada);  // exige uma palavra reservada específica e avança
+void consome_tipo();                                // exige um nome de tipo (inteiro, real, caractere, logico) e avança
+
+// PARTE 6: ANALISADOR SINTÁTICO: DO PROGRAMA AOS COMANDOS
+void analisa_algoritmo_principal();    // regra inicial: algoritmo "nome" ... fimalgoritmo
+void processa_bloco_variaveis();       // bloco 'var': declara variáveis na tabela do escopo atual
+void analisa_subrotinas();             // procedimento/funcao: abre escopo, parâmetros, corpo, fecha escopo
+void analisa_parametro();              // um parâmetro: insere no escopo da rotina e na lista de tipos dela
+void gera_armazenamento_parametros();  // [MEPA] guarda os argumentos da pilha nos parâmetros
+void avalia_lista_comandos();          // sequência de comandos (atribuição, leia, escreva, chamada, retorne...)
+void avalia_argumento_leia();          // um destino do comando leia
+void avalia_comando_condicional();     // se ... entao ... senao ... fimse
+void avalia_comando_repeticao();       // enquanto, para e repita
+
+// PARTE 7: ANALISADOR SINTÁTICO: EXPRESSÕES
+TipoDado avalia_expressao();          // nível 4: comparações; devolve logico
+TipoDado avalia_expressao_simples();  // nível 3: + - ou
+TipoDado avalia_termo();              // nível 2: * / \ mod e
+TipoDado avalia_fator();              // nível 1: o pedaço indivisível de uma expressão
+
+// PARTE 8: SEMÂNTICO (a): ERROS E TIPOS
+void erro_semantico(int linha, const char *mensagem);      // mostra a mensagem de erro semântico e encerra
+TipoDado lexema_para_tipo(const char *lexema);             // "inteiro" -> TIPO_INTEIRO (lido do fonte)
+const char *tipo_para_texto(TipoDado tipo);                // TIPO_INTEIRO -> "int" (guardado no campo tipo do nó)
+TipoDado texto_para_tipo(const char *texto);               // "int" -> TIPO_INTEIRO (lido de volta da tabela)
+const char *nome_do_tipo(TipoDado tipo);                   // TIPO_INTEIRO -> "inteiro" (usado nas mensagens de erro)
+int eh_numerico(TipoDado tipo);                            // inteiro ou real?
+int tipos_compativeis(TipoDado destino, TipoDado origem);  // destino aceita origem? (real <- inteiro sim; inteiro <- real não)
+
+// PARTE 9: SEMÂNTICO (b): TABELA DE SÍMBOLOS
+void abre_escopo(void);                                                              // empilha uma tabela nova (entrada em sub-rotina)
+void fecha_escopo(void);                                                             // checa [R4], libera a tabela do topo e desempilha
+int mesmo_nome(const char *guardado, const char *lido);                              // compara nomes pelos 15 primeiros caracteres
+TNo *busca_no_escopo_atual(const char *id);                                          // procura só na tabela do topo (para [R3])
+TNo *busca_simbolo(const char *id);                                                  // procura do topo até o global (para [R1])
+int busca_tabela_simbolos(const char *atributo_ID);                                  // versão do enunciado: devolve 1/0 em vez do nó
+TNo *busca_nome_usado(void);                                                         // busca o lexema atual e acusa [R1] se não existir
+TNo *insere_simbolo(const char *id, Categoria categoria, TipoDado tipo, int linha);  // cria o nó, dá o endereço e liga na lista do topo
+void adiciona_parametro(TNo *rotina, TipoDado tipo, int linha);                      // anota o tipo de mais um parâmetro na rotina
+
+// PARTE 10: SEMÂNTICO (c): AS REGRAS R1-R9
+int eh_palavra_reservada(const char *lexema);                                                      // o lexema é palavra reservada?
+void verifica_nome_nao_reservado(int aceita_fim_do_bloco);                                         // [R2] nome de variável não pode ser reservado
+TipoDado verifica_operacao(TipoDado esquerda, const char *operador, TipoDado direita, int linha);  // [R5] tipos de uma operação e tipo do resultado
+void verifica_atribuicao(TipoDado destino, TipoDado origem, const char *nome, int linha);          // [R5] destino <- origem compatíveis
+void verifica_condicao(TipoDado tipo, const char *comando, int linha);                             // condição de se/enquanto/repita deve ser logico
+void verifica_inteiro(TipoDado tipo, const char *o_que, int linha);                                // índice de vetor, mod e \ exigem inteiro
+void verifica_argumentos(TNo *rotina, TipoDado tipos_args[], int num_args, int linha);             // [R6] quantidade e tipo dos argumentos
+void verifica_retorno(TipoDado tipo_retornado, int linha);                                         // [R9] retorne compatível com o tipo da função
+void verifica_variaveis_nao_usadas(TEscopo *escopo);                                               // [R4] atribuída mas nunca usada
+
+// PARTE 11: GERADOR DE CÓDIGO MEPA
+int proximo_rotulo(void);                                        // entrega um número de rótulo novo (L1, L2, ...)
+void emite_linha(const char *linha);                             // escreve uma linha no arquivo (ou no buffer do passo)
+void gera_codigo(const char *instrucao, const char *argumento);  // instrução com argumento texto:   CRVL x
+void gera_codigo_numero(const char *instrucao, int numero);      // instrução com argumento número: AMEM 3
+void gera_rotulo(int rotulo, const char *instrucao);             // rótulo + instrução:              L3: NADA
+void gera_desvio(const char *instrucao, int rotulo);             // desvio para rótulo:              DSVF L3
+
+
+// ============================================================================
+// PARTE 3: MAIN: O PONTO DE PARTIDA
+// ============================================================================
+// Comece a leitura por aqui. A main abre o arquivo, cria os arquivos de saída,
+// abre o escopo global e chama a primeira regra da gramática.
+// A partir daí, o PARSER comanda tudo: ele chama o léxico quando precisa de um
+// token, o semântico quando precisa verificar algo e o gerador quando precisa
+// escrever MEPA (tradução dirigida pela sintaxe, numa passada só).
+// ============================================================================
+
+// ---- main --------------------------------------------------------------------
+int main(int argc, char *argv[]) {
+    // Validação inicial para evitar que o compilador crashe sem o nome do arquivo-fonte
+    // O argc conta quantos parâmetros foram escritos no console; o mínimo é 2 (compilador.exe e arquivo.txt)
+    if (argc < 2) {
+        printf("Erro: Ficheiro fonte nao informado.\n");
+        printf("Uso: %s <nome_do_arquivo.txt>\n", argv[0]);
+        return 1;
+    }
+
+    // Abre o código-fonte que o usuário apontou, operando apenas em modo "r" (Read/Leitura)
+    FILE *arquivo_fonte = fopen(argv[1], "r");
+    if (arquivo_fonte == NULL) {
+        printf("Erro: Nao foi possivel abrir o ficheiro %s\n", argv[1]);
+        return 1;
+    }
+
+    // ------------------------------------------------------------------------
+    // PREPARAÇÃO DE MEMÓRIA DINÂMICA
+    // Calcula a quantidade exata de caracteres do arquivo para alocar (malloc) 
+    // a memória estritamente necessária, evitando buffer overflow/overread.
+    // ------------------------------------------------------------------------
+    
+    fseek(arquivo_fonte, 0, SEEK_END);          // Joga o cursor invisível de leitura até o fim do txt
+    long tamanho_ficheiro = ftell(arquivo_fonte); // Pergunta "qual a distância daqui pro começo?", pegando o tamanho do txt
+    rewind(arquivo_fonte);                      // Devolve o cursor lá pro começo para lermos o conteúdo depois
+
+    // Aloca (tamanho + 1) para caber o '\0' que encerra strings no C
+    codigo_fonte = (char *)malloc((tamanho_ficheiro + 1) * sizeof(char));
+    if (codigo_fonte == NULL) {
+        printf("Erro: Falha na alocacao de memoria para o codigo_fonte.\n");
+        fclose(arquivo_fonte);
+        return 1;
+    }
+
+    // Passa todo o texto para a string global em uma só tacada e fecha o arquivo original por segurança
+    size_t lidos = fread(codigo_fonte, sizeof(char), tamanho_ficheiro, arquivo_fonte);
+    codigo_fonte[lidos] = '\0'; // Carimba o final com segurança
+    fclose(arquivo_fonte);
+
+    // Abre (ou cria) um arquivo de saída limpo para gravar a tabela de tokens processada pelo Léxico
+    arquivo_saida = fopen("saida_tokens.txt", "w");
+
+    // FASE 2 [MEPA]: arquivo com o código intermediário gerado
+    arquivo_mepa = fopen("saida_mepa.txt", "w");
+    if (arquivo_mepa == NULL) {
+        printf("Erro: Nao foi possivel criar o arquivo saida_mepa.txt\n");
+        free(codigo_fonte);
+        if (arquivo_saida != NULL) fclose(arquivo_saida);
+        return 1;
+    }
+
+    // FASE 2: cria a tabela do escopo GLOBAL (base da pilha) antes de começar a análise
+    abre_escopo();
+
+    // Dá o pontapé inicial no sistema LL(1): carrega o primeiro token preenchendo o lookahead
+    // e na sequência chama o Analisador Sintático para validar esse lookahead
+    nextToken(); 
+    analisa_algoritmo_principal();
+    
+    // Validação especial de EOF Lock:
+    // Uma vez finalizada a análise de regras gramaticais, obrigatoriamente a leitura deve parar no EOF.
+    // Caso a gramática seja bem sucedida, mas acuse que ainda tem token sobrando/sujeira fora de escopo, levanta erro.
+    if (lookahead.type != TOKEN_EOF) {
+        printf("ERRO SINTÁTICO\n");
+        printf("Linha: %d\n", lookahead.line);
+        printf("Encontrado lixo após o 'fimalgoritmo': %s\n", lexema_atual);
+        exit(1);
+    }
+    
+    // FASE 2 [R4]: verifica as variáveis globais atribuídas e não usadas e libera a tabela global
+    fecha_escopo();
+
+    // [MEPA] libera a memória das globais e encerra o programa MEPA
+    if (total_memoria_global > 0) gera_codigo_numero("DMEM", total_memoria_global);
+    gera_codigo("PARA", NULL);
+    fclose(arquivo_mepa);
+    arquivo_mepa = NULL;
+
+    // Se o código passar vivo por todas as funções do analisador sem acionar nenhum erro
+    // (léxico, sintático ou semântico), ele está validado e o código MEPA foi gerado.
+    printf("Compilação concluída com sucesso. Código sem erros léxicos, sintáticos ou semânticos!\n");
+    printf("Código MEPA gerado em saida_mepa.txt\n");
+
+    // Limpa a memória alocada e solta o txt de saída antes de encerrar
+    free(codigo_fonte);
+    if (arquivo_saida != NULL) fclose(arquivo_saida);
+
+    return 0; // Finaliza o sistema retornando código 0 de encerramento saudável
+}
+
+
+// ============================================================================
+// PARTE 4: ANALISADOR LÉXICO (Fase 1)
+// ============================================================================
+// Transforma o texto em tokens. É um autômato escrito com if/while:
+// cada chamada lê caracteres até formar UM token e o devolve.
+// ============================================================================
+
+// ---- obterToken --------------------------------------------------------------
 /*
  * Função principal do Scanner.
  * Ela varre o texto, caractere por caractere, para montar e classificar o próximo Token.
@@ -422,569 +655,16 @@ Token obterToken() {
     return token;
 }
 
-// ============================================================================
-// FASE 2 - ETAPA 4: ERROS SEMÂNTICOS E CONVERSÃO DE TIPOS
-// ============================================================================
-
-/*
- * Imprime um erro semântico e encerra a compilação.
- * Formato igual ao dos outros erros:
- *   ERRO SEMÂNTICO
- *   Linha: N
- *   <mensagem>
- * Quem chama monta a mensagem (ex.: com snprintf "Variável 'x' não declarada").
- */
-void erro_semantico(int linha, const char *mensagem) {
-    // Mesmo formato do ERRO LÉXICO e do ERRO SINTÁTICO
-    printf("ERRO SEMÂNTICO\n");
-    printf("Linha: %d\n", linha);
-    printf("%s\n", mensagem);
-
-    // Fecha os arquivos que estiverem abertos, para não deixar saída pela metade sem gravar
-    if (arquivo_saida) { fclose(arquivo_saida); arquivo_saida = NULL; }
-    if (arquivo_mepa)  { fclose(arquivo_mepa);  arquivo_mepa  = NULL; }
-
-    // Mesmo código de saída dos erros léxico e sintático (exit(1)).
-    // DÚVIDA PARA O PROFESSOR: se o programa deve terminar com 0 também em caso de erro, trocar aqui.
-    exit(1);
-}
-
-/*
- * Converte a palavra reservada de tipo ("inteiro", "real", "caractere", "logico")
- * no TipoDado correspondente. Usada nas declarações.
- */
-TipoDado lexema_para_tipo(const char *lexema) {
-    // O léxico diferencia maiúsculas de minúsculas, então a comparação é exata (strcmp)
-    if (strcmp(lexema, "inteiro") == 0)   return TIPO_INTEIRO;
-    if (strcmp(lexema, "real") == 0)      return TIPO_REAL;
-    if (strcmp(lexema, "caractere") == 0) return TIPO_CARACTERE;
-    if (strcmp(lexema, "logico") == 0)    return TIPO_LOGICO;
-    return TIPO_INDEFINIDO; // não é palavra de tipo
-}
-
-/*
- * Converte um TipoDado no texto guardado no campo 'tipo' do TNo.
- * ATENÇÃO: o campo tem 7 posições (6 letras + '\0'), então "inteiro" (7 letras)
- * e "caractere" (9 letras) não cabem. Por isso usamos abreviações:
- *   inteiro -> "int"   real -> "real"   caractere -> "char"   logico -> "logico"
- * DÚVIDA PARA O PROFESSOR: confirmar se essas abreviações são aceitas.
- */
-const char *tipo_para_texto(TipoDado tipo) {
-    switch (tipo) {
-        case TIPO_INTEIRO:   return "int";
-        case TIPO_REAL:      return "real";
-        case TIPO_CARACTERE: return "char";
-        case TIPO_LOGICO:    return "logico";
-        default:             return ""; // TIPO_INDEFINIDO (ex.: procedimento, que não tem tipo)
-    }
-}
-
-/*
- * Converte o texto do campo 'tipo' do TNo de volta para TipoDado.
- * Usada quando um símbolo é encontrado na tabela e precisamos do seu tipo.
- */
-TipoDado texto_para_tipo(const char *texto) {
-    // Inverso de tipo_para_texto(): usa as mesmas abreviações
-    if (strcmp(texto, "int") == 0)    return TIPO_INTEIRO;
-    if (strcmp(texto, "real") == 0)   return TIPO_REAL;
-    if (strcmp(texto, "char") == 0)   return TIPO_CARACTERE;
-    if (strcmp(texto, "logico") == 0) return TIPO_LOGICO;
-    return TIPO_INDEFINIDO; // texto vazio ou desconhecido
-}
 
 // ============================================================================
-// FASE 2 - ETAPA 5: TABELA DE SÍMBOLOS (PILHA DE TABELAS POR ESCOPO)
+// PARTE 5: PONTE ENTRE LÉXICO E SINTÁTICO
+// ============================================================================
+// O parser nunca chama obterToken direto: passa por aqui.
+// nextToken avança o lookahead e grava saida_tokens.txt;
+// consome* conferem se o token atual é o esperado (senão: erro sintático).
 // ============================================================================
 
-void verifica_variaveis_nao_usadas(TEscopo *escopo); // definida na Etapa 6
-
-/*
- * Empilha uma tabela vazia: início do programa (escopo global)
- * e início de cada procedimento/função.
- */
-void abre_escopo(void) {
-    TEscopo *novo = (TEscopo *)malloc(sizeof(TEscopo));
-    if (novo == NULL) {
-        printf("Erro: Falha na alocacao de memoria para a tabela de simbolos.\n");
-        exit(1);
-    }
-    novo->inicio = NULL;            // tabela começa vazia
-    novo->proximo_endereco = 0;     // a primeira variável deste escopo terá endereço 0
-    novo->anterior = topo_escopo;   // o escopo que era o topo fica "embaixo" deste
-    topo_escopo = novo;             // push: a nova tabela vira o topo da pilha
-}
-
-/*
- * Desempilha a tabela do topo: fim de cada sub-rotina e fim do programa.
- * Antes de liberar, verifica a regra [R4] para os símbolos deste escopo.
- */
-void fecha_escopo(void) {
-    if (topo_escopo == NULL) return;
-
-    verifica_variaveis_nao_usadas(topo_escopo); // [R4]
-
-    // Libera cada nó da lista encadeada deste escopo
-    TNo *atual = topo_escopo->inicio;
-    while (atual != NULL) {
-        TNo *proximo = atual->prox;
-        free(atual);
-        atual = proximo;
-    }
-
-    // pop: o escopo de baixo volta a ser o topo
-    TEscopo *removido = topo_escopo;
-    topo_escopo = topo_escopo->anterior;
-    free(removido);
-}
-
-/*
- * Procura um identificador SOMENTE na tabela do topo.
- * Usada na declaração, para detectar redeclaração no mesmo escopo [R3].
- * Devolve o nó ou NULL.
- */
-TNo *busca_no_escopo_atual(const char *id) {
-    if (topo_escopo == NULL) return NULL;
-    for (TNo *no = topo_escopo->inicio; no != NULL; no = no->prox) {
-        if (strcmp(no->ID, id) == 0) return no;
-    }
-    return NULL;
-}
-
-/*
- * Resolução de nomes: procura do topo da pilha até o escopo global.
- * Devolve o nó encontrado ou NULL (não gera erro).
- * Como a busca começa no topo, um nome local "esconde" um global de mesmo nome.
- */
-TNo *busca_simbolo(const char *id) {
-    for (TEscopo *escopo = topo_escopo; escopo != NULL; escopo = escopo->anterior) {
-        for (TNo *no = escopo->inicio; no != NULL; no = no->prox) {
-            if (strcmp(no->ID, id) == 0) return no;
-        }
-    }
-    return NULL;
-}
-
-/*
- * Função exigida pelo enunciado.
- * Recebe o lexema do token corrente (o ID) e devolve o endereço da variável.
- * Se o identificador não estiver em nenhuma tabela, gera erro semântico [R1].
- * Deve ser chamada ANTES de consumir o ID, enquanto lexema_atual e
- * lookahead.line ainda se referem a ele.
- * (Procedimentos e funções não ocupam endereço: para eles devolve -1.)
- */
-int busca_tabela_simbolos(const char *atributo_ID) {
-    TNo *no = busca_simbolo(atributo_ID);
-    if (no == NULL) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem), "Identificador '%s' não declarado", atributo_ID);
-        erro_semantico(lookahead.line, mensagem);
-        return -1; // não chega aqui: erro_semantico encerra o programa
-    }
-    return no->endereco;
-}
-
-/*
- * Insere um símbolo na tabela do topo.
- * - [R3] se já existir no escopo atual -> erro semântico de redeclaração
- * - nomes com mais de 15 letras não cabem em ID[16] -> erro semântico
- *   (truncar faria dois nomes longos diferentes virarem o mesmo nome)
- * - variáveis e parâmetros recebem endereço = ordem de declaração no escopo;
- *   procedimentos e funções não ocupam memória de dados (endereço -1)
- * - o nó é encadeado no FIM da lista, para a lista ficar na ordem de declaração
- * Devolve o nó criado (usado depois para adicionar parâmetros às rotinas).
- */
-TNo *insere_simbolo(const char *id, Categoria categoria, TipoDado tipo, int linha) {
-    char mensagem[200];
-
-    if (strlen(id) >= TAM_ID) {
-        snprintf(mensagem, sizeof(mensagem),
-                 "Identificador '%s' tem mais de %d caracteres", id, TAM_ID - 1);
-        erro_semantico(linha, mensagem);
-    }
-
-    if (busca_no_escopo_atual(id) != NULL) { // [R3]
-        snprintf(mensagem, sizeof(mensagem), "Identificador '%s' já declarado neste escopo", id);
-        erro_semantico(linha, mensagem);
-    }
-
-    TNo *novo = (TNo *)malloc(sizeof(TNo));
-    if (novo == NULL) {
-        printf("Erro: Falha na alocacao de memoria para a tabela de simbolos.\n");
-        exit(1);
-    }
-
-    // Campos exigidos pelo enunciado
-    strcpy(novo->ID, id);
-    strcpy(novo->tipo, tipo_para_texto(tipo));
-    if (categoria == CAT_VARIAVEL || categoria == CAT_PARAMETRO) {
-        novo->endereco = topo_escopo->proximo_endereco++;
-    } else {
-        novo->endereco = -1;
-    }
-    novo->prox = NULL;
-
-    // Campos acrescentados na fase 2
-    novo->categoria = categoria;
-    novo->eh_vetor = 0;
-    novo->num_params = 0;
-    novo->atribuida = (categoria == CAT_PARAMETRO); // parâmetro já chega com o valor passado na chamada
-    novo->usada = 0;
-    novo->linha_declaracao = linha;
-    novo->rotulo_entrada = 0;
-
-    // Encadeia no fim da lista do topo
-    if (topo_escopo->inicio == NULL) {
-        topo_escopo->inicio = novo;
-    } else {
-        TNo *ultimo = topo_escopo->inicio;
-        while (ultimo->prox != NULL) ultimo = ultimo->prox;
-        ultimo->prox = novo;
-    }
-    return novo;
-}
-
-/*
- * Registra o tipo de mais um parâmetro na rotina (procedimento/função).
- * Chamada na declaração dos parâmetros; usada depois na checagem [R6].
- */
-void adiciona_parametro(TNo *rotina, TipoDado tipo, int linha) {
-    if (rotina->num_params >= MAX_PARAMS) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem),
-                 "A rotina '%s' excede o limite de %d parâmetros", rotina->ID, MAX_PARAMS);
-        erro_semantico(linha, mensagem);
-    }
-    rotina->tipos_params[rotina->num_params++] = tipo;
-}
-
-// ============================================================================
-// FASE 2 - ETAPA 6: VERIFICAÇÕES SEMÂNTICAS
-// ============================================================================
-
-/*
- * [R2] Verifica se um lexema é palavra reservada.
- * A lista é a mesma usada em obterToken() (que ficou como na Fase 1).
- */
-int eh_palavra_reservada(const char *lexema) {
-    static const char *reservadas[] = {
-        "algoritmo", "var", "inicio", "fimalgoritmo", "se", "entao", "senao", "fimse",
-        "escreva", "escreval", "leia", "enquanto", "faca", "fimenquanto",
-        "para", "de", "ate", "passo", "fimpara",
-        "inteiro", "real", "caractere", "logico", "vetor",
-        "procedimento", "fimprocedimento", "funcao", "retorne", "fimfuncao",
-        "verdadeiro", "falso", "MOD", "E", "OU"
-    };
-    int quantidade = sizeof(reservadas) / sizeof(reservadas[0]);
-    for (int i = 0; i < quantidade; i++) {
-        if (strcmp(lexema, reservadas[i]) == 0) return 1;
-    }
-    return 0;
-}
-
-/*
- * [R2] Chamada nos pontos em que a gramática espera o NOME de algo novo
- * (variável, parâmetro, procedimento ou função).
- * Se no lugar do nome veio uma palavra reservada, o erro é SEMÂNTICO
- * (sem esta checagem ele apareceria como sintático).
- * 'aceita_fim_do_bloco' = 1 no começo de cada linha do bloco 'var', onde
- * 'inicio', 'var', 'procedimento' e 'funcao' encerram o bloco normalmente.
- */
-void verifica_nome_nao_reservado(int aceita_fim_do_bloco) {
-    if (lookahead.type != TOKEN_KEYWORD || !eh_palavra_reservada(lexema_atual)) return;
-
-    if (aceita_fim_do_bloco &&
-        (strcmp(lexema_atual, "inicio") == 0 || strcmp(lexema_atual, "var") == 0 ||
-         strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
-        return;
-    }
-
-    char mensagem[200];
-    snprintf(mensagem, sizeof(mensagem),
-             "Palavra reservada '%s' não pode ser usada como nome", lexema_atual);
-    erro_semantico(lookahead.line, mensagem);
-}
-
-/* Nome completo do tipo, usado nas mensagens de erro (o TNo guarda a abreviação). */
-const char *nome_do_tipo(TipoDado tipo) {
-    switch (tipo) {
-        case TIPO_INTEIRO:   return "inteiro";
-        case TIPO_REAL:      return "real";
-        case TIPO_CARACTERE: return "caractere";
-        case TIPO_LOGICO:    return "logico";
-        default:             return "indefinido";
-    }
-}
-
-/* 1 se o tipo é numérico (inteiro ou real) */
-int eh_numerico(TipoDado tipo) {
-    return tipo == TIPO_INTEIRO || tipo == TIPO_REAL;
-}
-
-/*
- * Um valor do tipo 'origem' pode ser guardado num lugar do tipo 'destino'?
- * Tipos iguais sempre podem. A única conversão aceita é inteiro -> real
- * (o inteiro cabe no real sem perder nada; o contrário perderia a parte decimal).
- */
-int tipos_compativeis(TipoDado destino, TipoDado origem) {
-    return destino == origem || (destino == TIPO_REAL && origem == TIPO_INTEIRO);
-}
-
-/*
- * [R5] Verifica se um operador pode ser aplicado aos dois tipos e devolve
- * o tipo do resultado:
- *   + - *            numérico com numérico -> inteiro se os dois forem inteiros, senão real
- *   /                numérico com numérico -> real
- *   \ e MOD          inteiro com inteiro   -> inteiro
- *   E, OU            logico com logico     -> logico
- *   < <= > >=        numérico com numérico -> logico
- *   = <>             numérico com numérico, ou dois valores do mesmo tipo -> logico
- * Se forem incompatíveis -> erro semântico.
- */
-TipoDado verifica_operacao(TipoDado esquerda, const char *operador, TipoDado direita, int linha) {
-    TipoDado resultado = TIPO_INDEFINIDO;
-    int ambos_numericos = eh_numerico(esquerda) && eh_numerico(direita);
-
-    if (strcmp(operador, "+") == 0 || strcmp(operador, "-") == 0 || strcmp(operador, "*") == 0) {
-        if (ambos_numericos) {
-            resultado = (esquerda == TIPO_INTEIRO && direita == TIPO_INTEIRO) ? TIPO_INTEIRO : TIPO_REAL;
-        }
-    } else if (strcmp(operador, "/") == 0) {
-        if (ambos_numericos) resultado = TIPO_REAL;
-    } else if (strcmp(operador, "\\") == 0 || strcmp(operador, "MOD") == 0) {
-        if (esquerda == TIPO_INTEIRO && direita == TIPO_INTEIRO) resultado = TIPO_INTEIRO;
-    } else if (strcmp(operador, "E") == 0 || strcmp(operador, "OU") == 0) {
-        if (esquerda == TIPO_LOGICO && direita == TIPO_LOGICO) resultado = TIPO_LOGICO;
-    } else if (strcmp(operador, "=") == 0 || strcmp(operador, "<>") == 0) {
-        if (ambos_numericos || esquerda == direita) resultado = TIPO_LOGICO;
-    } else { // < <= > >=
-        if (ambos_numericos) resultado = TIPO_LOGICO;
-    }
-
-    if (resultado == TIPO_INDEFINIDO) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem), "Tipos incompatíveis: %s %s %s",
-                 nome_do_tipo(esquerda), operador, nome_do_tipo(direita));
-        erro_semantico(linha, mensagem);
-    }
-    return resultado;
-}
-
-/*
- * [R5] Verifica se o valor de uma expressão pode ser atribuído à variável.
- * Decisão do grupo: real <- inteiro é permitido; inteiro <- real não.
- */
-void verifica_atribuicao(TipoDado destino, TipoDado origem, const char *nome, int linha) {
-    if (!tipos_compativeis(destino, origem)) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem),
-                 "Atribuição incompatível: a variável '%s' é %s e o valor é %s",
-                 nome, nome_do_tipo(destino), nome_do_tipo(origem));
-        erro_semantico(linha, mensagem);
-    }
-}
-
-/*
- * Verifica se a condição de 'se' / 'enquanto' é do tipo lógico.
- */
-void verifica_condicao(TipoDado tipo, const char *comando, int linha) {
-    if (tipo != TIPO_LOGICO) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem),
-                 "A condição do '%s' deve ser logico, mas é %s", comando, nome_do_tipo(tipo));
-        erro_semantico(linha, mensagem);
-    }
-}
-
-/*
- * [R5] Usada no 'para' e no índice de vetor: o valor precisa ser inteiro.
- */
-void verifica_inteiro(TipoDado tipo, const char *o_que, int linha) {
-    if (tipo != TIPO_INTEIRO) {
-        char mensagem[200];
-        snprintf(mensagem, sizeof(mensagem), "%s deve ser inteiro, mas é %s", o_que, nome_do_tipo(tipo));
-        erro_semantico(linha, mensagem);
-    }
-}
-
-/*
- * [R6] Compara os argumentos de uma chamada com os parâmetros da rotina:
- * mesma quantidade e tipos compatíveis, na mesma ordem.
- */
-void verifica_argumentos(TNo *rotina, TipoDado tipos_args[], int num_args, int linha) {
-    char mensagem[200];
-
-    if (num_args != rotina->num_params) {
-        snprintf(mensagem, sizeof(mensagem), "'%s' recebeu %d argumento(s); esperado(s) %d",
-                 rotina->ID, num_args, rotina->num_params);
-        erro_semantico(linha, mensagem);
-    }
-    for (int i = 0; i < num_args; i++) {
-        if (!tipos_compativeis(rotina->tipos_params[i], tipos_args[i])) {
-            snprintf(mensagem, sizeof(mensagem), "Argumento %d de '%s': esperado %s, recebido %s",
-                     i + 1, rotina->ID, nome_do_tipo(rotina->tipos_params[i]), nome_do_tipo(tipos_args[i]));
-            erro_semantico(linha, mensagem);
-        }
-    }
-}
-
-/*
- * [R9] Verifica o 'retorne': precisa estar dentro de uma função e o tipo
- * da expressão precisa ser compatível com o tipo declarado da função.
- */
-void verifica_retorno(TipoDado tipo_retornado, int linha) {
-    char mensagem[200];
-
-    if (rotina_atual == NULL || rotina_atual->categoria != CAT_FUNCAO) {
-        erro_semantico(linha, "'retorne' fora de uma função");
-        return; // não chega aqui: erro_semantico encerra o programa
-    }
-    TipoDado tipo_funcao = texto_para_tipo(rotina_atual->tipo);
-    if (!tipos_compativeis(tipo_funcao, tipo_retornado)) {
-        snprintf(mensagem, sizeof(mensagem),
-                 "Retorno incompatível: a função '%s' é %s e o valor é %s",
-                 rotina_atual->ID, nome_do_tipo(tipo_funcao), nome_do_tipo(tipo_retornado));
-        erro_semantico(linha, mensagem);
-    }
-}
-
-/*
- * [R4] Percorre a tabela de um escopo procurando variáveis que receberam
- * valor (atribuida == 1) mas nunca foram usadas (usada == 0).
- * Chamada por fecha_escopo() antes de liberar a tabela.
- * Decisão do grupo: variável declarada e nunca atribuída NÃO é erro
- * (o enunciado só fala de variável "com valor atribuído").
- */
-void verifica_variaveis_nao_usadas(TEscopo *escopo) {
-    for (TNo *no = escopo->inicio; no != NULL; no = no->prox) {
-        if ((no->categoria == CAT_VARIAVEL || no->categoria == CAT_PARAMETRO) &&
-            no->atribuida && !no->usada) {
-            char mensagem[200];
-            snprintf(mensagem, sizeof(mensagem), "%s '%s' recebeu valor mas nunca foi usado(a)",
-                     no->categoria == CAT_PARAMETRO ? "Parâmetro" : "Variável", no->ID);
-            erro_semantico(no->linha_declaracao, mensagem);
-        }
-    }
-}
-
-/*
- * Procura um nome usado no corpo do programa.
- * Primeiro chama busca_tabela_simbolos() (exigida pelo enunciado), que gera o
- * erro [R1] se o nome não existir; depois devolve o nó, para as outras regras
- * consultarem categoria e tipo. Deve ser chamada ANTES de consumir o ID.
- */
-TNo *busca_nome_usado(void) {
-    busca_tabela_simbolos(lexema_atual); // [R1]
-    return busca_simbolo(lexema_atual);
-}
-
-// ============================================================================
-// FASE 2 - ETAPA 7: GERAÇÃO DE CÓDIGO INTERMEDIÁRIO (MEPA)
-// Formato do arquivo saida_mepa.txt:
-//   - uma instrução por linha, com 4 espaços na frente:   "    CRVL x"
-//   - rótulos na coluna 0, seguidos da instrução:          "L3: NADA"
-//   - variáveis referenciadas pelo NOME (exigência do enunciado)
-// Instruções cuja forma depende da MEPA da disciplina (confirmar com o professor):
-//   DIVF (divisão real), MODI (resto), CRCT com real ou texto, CRVI/ARMI (vetor),
-//   e a convenção de chamada de rotinas (ENPR / CHPR / RTPR).
-// ============================================================================
-
-#define TAM_BUFFER_PASSO 4096
-
-int gravando_passo = 0;                    // 1 enquanto o código do 'passo' é guardado
-char buffer_passo[TAM_BUFFER_PASSO];       // código do 'passo', escrito depois do corpo do 'para'
-int total_memoria_global = 0;              // posições reservadas com AMEM (liberadas com DMEM no fim)
-int rotulo_saida_rotina = 0;               // rótulo de saída da sub-rotina atual (usado no 'retorne')
-
-/*
- * Função recomendada pelo enunciado: devolve o próximo rótulo positivo (1, 2, 3...).
- * ATENÇÃO: como o parser é recursivo, cada função pega os seus rótulos
- * em variáveis locais NO INÍCIO, antes de chamar as funções internas.
- */
-int proximo_rotulo(void) {
-    return ++contador_rotulos;
-}
-
-/*
- * Ponto único de escrita: manda a linha para o arquivo MEPA ou, durante o
- * 'passo' de um 'para', para o buffer que será escrito depois do corpo do laço.
- */
-void emite_linha(const char *linha) {
-    if (gravando_passo) {
-        if (strlen(buffer_passo) + strlen(linha) + 2 >= TAM_BUFFER_PASSO) {
-            printf("Erro: expressao do 'passo' grande demais.\n");
-            exit(1);
-        }
-        strcat(buffer_passo, linha);
-        strcat(buffer_passo, "\n");
-    } else if (arquivo_mepa != NULL) {
-        fprintf(arquivo_mepa, "%s\n", linha);
-    }
-}
-
-/*
- * Escreve uma instrução no arquivo MEPA, ex.: "CRVL x", "SOMA", "CRCT 5".
- * argumento == NULL para instruções sem argumento.
- */
-void gera_codigo(const char *instrucao, const char *argumento) {
-    char linha[160];
-    if (argumento != NULL) {
-        snprintf(linha, sizeof(linha), "    %s %s", instrucao, argumento);
-    } else {
-        snprintf(linha, sizeof(linha), "    %s", instrucao);
-    }
-    emite_linha(linha);
-}
-
-/* Versão de gera_codigo para argumentos numéricos (AMEM 3, DMEM 3) */
-void gera_codigo_numero(const char *instrucao, int numero) {
-    char argumento[20];
-    snprintf(argumento, sizeof(argumento), "%d", numero);
-    gera_codigo(instrucao, argumento);
-}
-
-/*
- * Escreve a definição de um rótulo, ex.: "L3: NADA" (ou "L2: ENPR" na entrada de uma rotina).
- */
-void gera_rotulo(int rotulo, const char *instrucao) {
-    char linha[40];
-    snprintf(linha, sizeof(linha), "L%d: %s", rotulo, instrucao);
-    emite_linha(linha);
-}
-
-/*
- * Escreve um desvio para um rótulo, ex.: "DSVF L3", "DSVS L1" ou "CHPR L2".
- */
-void gera_desvio(const char *instrucao, int rotulo) {
-    char linha[40];
-    snprintf(linha, sizeof(linha), "    %s L%d", instrucao, rotulo);
-    emite_linha(linha);
-}
-
-// ============================================================================
-// ETAPA 3: ANALISADOR SINTÁTICO (PARSER)
-// O parser foi construído no modelo Descendente Recursivo LL(1).
-// Cada função representa uma regra de produção da gramática.
-// ============================================================================
-
-// Protótipos das funções, necessários pois as funções do parser chamam umas às outras recursivamente
-void nextToken();
-void consome(TokenNome tokenEsperado);
-void consome_palavra(const char *palavraEsperada);
-void consome_tipo();
-
-void analisa_algoritmo_principal();
-void processa_bloco_variaveis();
-void avalia_lista_comandos();
-void avalia_comando_condicional();
-void avalia_comando_repeticao();
-void analisa_subrotinas();
-// FASE 2: as funções de expressão passam a devolver o tipo calculado [R5]
-TipoDado avalia_expressao();
-TipoDado avalia_fator();
-TipoDado avalia_termo();
-TipoDado avalia_expressao_simples();
-void avalia_argumento_leia();
-
+// ---- nextToken ---------------------------------------------------------------
 /*
  * Função responsável por chamar o Léxico sob demanda e atualizar o 'lookahead'.
  * Aqui também aproveitamos para imprimir as informações formatadas (e gerar o txt)
@@ -1047,6 +727,7 @@ void nextToken() {
     }
 }
 
+// ---- consome -----------------------------------------------------------------
 /*
  * Função "consumir" para checar Categorias Gerais (como um TOKEN_ID).
  * Verifica se o token atual (lookahead) pertence à categoria que a regra sintática exige.
@@ -1063,6 +744,7 @@ void consome(TokenNome tokenEsperado) {
     }
 }
 
+// ---- consome_palavra ---------------------------------------------------------
 /*
  * Função "consumir" focada em Palavras Exatas e Símbolos (como "inicio", "se", ":").
  * Usada pois o enum TOKEN_KEYWORD é muito amplo, então precisamos validar usando a string salva no lexema_atual.
@@ -1079,6 +761,7 @@ void consome_palavra(const char *palavraEsperada) {
     }
 }
 
+// ---- consome_tipo ------------------------------------------------------------
 /*
  * Consome apenas tipos de dados válidos (inteiro, real, caractere, logico).
  * Qualquer outra palavra reservada, símbolo ou identificador gera erro sintático.
@@ -1098,10 +781,17 @@ void consome_tipo() {
     }
 }
 
+
 // ============================================================================
-// ANÁLISE SINTÁTICA DE BLOCOS E ESTRUTURAS
+// PARTE 6: ANALISADOR SINTÁTICO: DO PROGRAMA AOS COMANDOS
+// ============================================================================
+// Descendente recursivo LL(1): cada função é uma regra da gramática.
+// Lidas de cima para baixo, seguem a forma de um programa MiniVisualg:
+//   algoritmo -> var -> sub-rotinas -> inicio -> comandos -> fimalgoritmo
+// Os trechos marcados [Rn] chamam o semântico; os marcados [MEPA] chamam o gerador.
 // ============================================================================
 
+// ---- analisa_algoritmo_principal ---------------------------------------------
 /*
  * Função raiz do Analisador Sintático.
  * Verifica a macroestrutura obrigatória do arquivo: cabeçalho 'algoritmo',
@@ -1139,6 +829,7 @@ void analisa_algoritmo_principal() {
     // [MEPA] DMEM e PARA são gerados na main, depois da verificação [R4] do escopo global
 }
 
+// ---- processa_bloco_variaveis ------------------------------------------------
 /*
  * Faz a análise sintática do bloco 'var' onde se criam as variáveis.
  */
@@ -1293,6 +984,148 @@ void processa_bloco_variaveis() {
     }
 }
 
+// ---- analisa_subrotinas ------------------------------------------------------
+/*
+ * Análise Sintática da declaração de Funções e Procedimentos.
+ * Lê e valida toda a assinatura do bloco, os parâmetros formais e o escopo interno.
+ */
+void analisa_subrotinas() {
+    // Fica rodando para suportar a declaração de múltiplas sub-rotinas antes do algoritmo principal
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
+        
+        // [MEPA] Padrão de uma sub-rotina (convenção do grupo; confirmar com a MEPA da disciplina):
+        //   DSVS L_pula          o programa principal não executa a rotina "de passagem"
+        //   L_entrada: ENPR      ponto de entrada (destino do CHPR)
+        //   ARMZ <params>        tira da pilha os argumentos empilhados por quem chamou (do último ao primeiro)
+        //   <comandos>
+        //   L_saida: NADA        destino do 'retorne'
+        //   RTPR                 volta para quem chamou
+        //   L_pula: NADA
+        // Os três rótulos são pegos no começo, antes das chamadas recursivas.
+        int rotulo_pula = proximo_rotulo();
+        int rotulo_entrada = proximo_rotulo();
+        int rotulo_saida = proximo_rotulo();
+        gera_desvio("DSVS", rotulo_pula);
+
+        // Procedimentos (métodos void que não possuem um tipo de retorno)
+        if (strcmp(lexema_atual, "procedimento") == 0) {
+            consome_palavra("procedimento");
+            // [R2]/[R3] o nome entra no escopo ATUAL (global), ANTES de abrir o escopo do procedimento,
+            // para continuar visível depois que o escopo dele for descartado
+            verifica_nome_nao_reservado(0);
+            if (lookahead.type == TOKEN_ID) {
+                rotina_atual = insere_simbolo(lexema_atual, CAT_PROCEDIMENTO, TIPO_INDEFINIDO, lookahead.line);
+                rotina_atual->rotulo_entrada = rotulo_entrada;
+            }
+            consome(TOKEN_ID); // Consome o nome escolhido pelo usuário para o procedimento
+            abre_escopo();     // push: tabela do procedimento (parâmetros)
+            rotulo_saida_rotina = rotulo_saida;
+            gera_rotulo(rotulo_entrada, "ENPR");
+            
+            // Trata a entrada de parâmetros obrigatórios entre parênteses (ex: (a: inteiro, b: real))
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                do {
+                    // Se não for o primeiro parâmetro, então haverá uma vírgula antes do identificador
+                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
+                    analisa_parametro(); // [R2]/[R3]/[R6] nome, ':' e tipo do parâmetro
+                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0); // Repete o 'do' se encontrar outra vírgula
+                consome_palavra(")");
+            }
+            gera_armazenamento_parametros(); // [MEPA]
+            
+            consome_palavra("inicio");
+            avalia_lista_comandos();
+            consome_palavra("fimprocedimento"); 
+            gera_rotulo(rotulo_saida, "NADA");
+            gera_codigo("RTPR", NULL);
+            fecha_escopo();      // [R4] confere os parâmetros e pop
+            rotina_atual = NULL;
+            
+        } 
+        // Funções (semelhantes aos Procedimentos, porém ao final declaram um tipo de retorno obrigatório)
+        else if (strcmp(lexema_atual, "funcao") == 0) {
+            consome_palavra("funcao");
+            // [R2]/[R3] mesmo tratamento do nome do procedimento.
+            // O tipo de retorno só é conhecido depois dos parâmetros: entra como indefinido e é gravado abaixo
+            verifica_nome_nao_reservado(0);
+            if (lookahead.type == TOKEN_ID) {
+                rotina_atual = insere_simbolo(lexema_atual, CAT_FUNCAO, TIPO_INDEFINIDO, lookahead.line);
+                rotina_atual->rotulo_entrada = rotulo_entrada;
+            }
+            consome(TOKEN_ID); 
+            abre_escopo();     // push: tabela da função (parâmetros)
+            rotulo_saida_rotina = rotulo_saida;
+            gera_rotulo(rotulo_entrada, "ENPR");
+            
+            // A lógica de declaração de parâmetros é idêntica à do Procedimento
+            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
+                consome_palavra("(");
+                do {
+                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
+                    analisa_parametro(); // [R2]/[R3]/[R6]
+                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
+                consome_palavra(")");
+            }
+            gera_armazenamento_parametros(); // [MEPA]
+            
+            // Ao contrário dos Procedimentos, aqui obrigatoriamente declaramos o tipo que a Função vai retornar
+            consome_palavra(":");
+            // [R9] grava o tipo de retorno no nó da função (lido ANTES de consumir)
+            strcpy(rotina_atual->tipo, tipo_para_texto(lexema_para_tipo(lexema_atual)));
+            consome_tipo(); 
+            
+            consome_palavra("inicio");
+            avalia_lista_comandos();
+            consome_palavra("fimfuncao"); 
+            gera_rotulo(rotulo_saida, "NADA");
+            gera_codigo("RTPR", NULL);
+            fecha_escopo();      // [R4] confere os parâmetros e pop
+            rotina_atual = NULL;
+        }
+        gera_rotulo(rotulo_pula, "NADA");
+    }
+}
+
+// ---- analisa_parametro -------------------------------------------------------
+/*
+ * FASE 2: um parâmetro na declaração de uma sub-rotina ('nome: tipo').
+ * [R2] o nome não pode ser palavra reservada
+ * [R3] entra na tabela da rotina (topo da pilha) como parâmetro
+ * [R6] o tipo é registrado no nó da rotina, para conferir as chamadas
+ */
+void analisa_parametro() {
+    verifica_nome_nao_reservado(0);
+    char nome[100] = "";
+    int linha = lookahead.line;
+    if (lookahead.type == TOKEN_ID) strcpy(nome, lexema_atual); // guardado ANTES de consumir
+    consome(TOKEN_ID);
+    consome_palavra(":");
+    TipoDado tipo = lexema_para_tipo(lexema_atual);             // lido ANTES de consumir
+    consome_tipo(); // O tipo do dado esperado
+    insere_simbolo(nome, CAT_PARAMETRO, tipo, linha);
+    adiciona_parametro(rotina_atual, tipo, linha);
+}
+
+// ---- gera_armazenamento_parametros -------------------------------------------
+/*
+ * FASE 2 [MEPA]: no começo da rotina, os argumentos estão na pilha na ordem da
+ * chamada (o último no topo). Por isso são guardados do último parâmetro para o primeiro.
+ * Neste ponto a tabela do topo só tem os parâmetros, na ordem de declaração.
+ */
+void gera_armazenamento_parametros() {
+    TNo *parametros[MAX_PARAMS];
+    int quantidade = 0;
+    for (TNo *no = topo_escopo->inicio; no != NULL && quantidade < MAX_PARAMS; no = no->prox) {
+        parametros[quantidade++] = no;
+    }
+    for (int i = quantidade - 1; i >= 0; i--) {
+        gera_codigo("ARMZ", parametros[i]->ID);
+    }
+}
+
+// ---- avalia_lista_comandos ---------------------------------------------------
 /*
  * Lê as instruções dentro dos blocos de 'inicio'.
  * Analisa o lookahead constantemente para saber qual função específica do parser chamar a seguir.
@@ -1446,6 +1279,48 @@ void avalia_lista_comandos() {
     }
 }
 
+// ---- avalia_argumento_leia ---------------------------------------------------
+/*
+ * FASE 2: um argumento do 'leia'.
+ * Precisa ser uma variável (ou elemento de vetor), que RECEBE o valor lido.
+ * [R1] declarada   [R4] marcada como atribuída
+ * [MEPA] LEIT empilha o valor lido e ARMZ (ou ARMI, no vetor) guarda na variável
+ */
+void avalia_argumento_leia() {
+    int linha = lookahead.line;
+    char mensagem[200];
+
+    if (lookahead.type != TOKEN_ID) {
+        snprintf(mensagem, sizeof(mensagem), "'leia' exige uma variável, mas recebeu '%s'", lexema_atual);
+        erro_semantico(linha, mensagem);
+    }
+    TNo *simbolo = busca_nome_usado(); // [R1]
+    char nome[TAM_ID];
+    strcpy(nome, simbolo->ID);
+    if (simbolo->categoria != CAT_VARIAVEL && simbolo->categoria != CAT_PARAMETRO) {
+        snprintf(mensagem, sizeof(mensagem), "'%s' não é uma variável", nome);
+        erro_semantico(linha, mensagem);
+    }
+    consome(TOKEN_ID);
+
+    int acessou_vetor = 0;
+    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
+        if (!simbolo->eh_vetor) {
+            snprintf(mensagem, sizeof(mensagem), "'%s' não é um vetor", nome);
+            erro_semantico(linha, mensagem);
+        }
+        consome_palavra("[");
+        verifica_inteiro(avalia_expressao(), "O índice do vetor", linha);
+        consome_palavra("]");
+        acessou_vetor = 1;
+    }
+
+    simbolo->atribuida = 1; // [R4]
+    gera_codigo("LEIT", NULL);
+    gera_codigo(acessou_vetor ? "ARMI" : "ARMZ", nome);
+}
+
+// ---- avalia_comando_condicional ----------------------------------------------
 /*
  * Análise Sintática do bloco 'se' e 'senao'.
  */
@@ -1487,6 +1362,7 @@ void avalia_comando_condicional() {
     consome_palavra("fimse");
 }
 
+// ---- avalia_comando_repeticao ------------------------------------------------
 /*
  * Análise Sintática dos laços 'enquanto' e 'para'.
  */
@@ -1611,154 +1487,116 @@ void avalia_comando_repeticao() {
     }
 }
 
-/*
- * FASE 2: um parâmetro na declaração de uma sub-rotina ('nome: tipo').
- * [R2] o nome não pode ser palavra reservada
- * [R3] entra na tabela da rotina (topo da pilha) como parâmetro
- * [R6] o tipo é registrado no nó da rotina, para conferir as chamadas
- */
-void analisa_parametro() {
-    verifica_nome_nao_reservado(0);
-    char nome[100] = "";
-    int linha = lookahead.line;
-    if (lookahead.type == TOKEN_ID) strcpy(nome, lexema_atual); // guardado ANTES de consumir
-    consome(TOKEN_ID);
-    consome_palavra(":");
-    TipoDado tipo = lexema_para_tipo(lexema_atual);             // lido ANTES de consumir
-    consome_tipo(); // O tipo do dado esperado
-    insere_simbolo(nome, CAT_PARAMETRO, tipo, linha);
-    adiciona_parametro(rotina_atual, tipo, linha);
-}
 
-/*
- * FASE 2 [MEPA]: no começo da rotina, os argumentos estão na pilha na ordem da
- * chamada (o último no topo). Por isso são guardados do último parâmetro para o primeiro.
- * Neste ponto a tabela do topo só tem os parâmetros, na ordem de declaração.
- */
-void gera_armazenamento_parametros() {
-    TNo *parametros[MAX_PARAMS];
-    int quantidade = 0;
-    for (TNo *no = topo_escopo->inicio; no != NULL && quantidade < MAX_PARAMS; no = no->prox) {
-        parametros[quantidade++] = no;
-    }
-    for (int i = quantidade - 1; i >= 0; i--) {
-        gera_codigo("ARMZ", parametros[i]->ID);
-    }
-}
+// ============================================================================
+// PARTE 7: ANALISADOR SINTÁTICO: EXPRESSÕES
+// ============================================================================
+// Uma função por nível de precedência (do mais fraco ao mais forte):
+//   avalia_expressao         -> relacionais  (=  <>  <  <=  >  >=)
+//   avalia_expressao_simples -> soma/subtração/ou
+//   avalia_termo             -> multiplicação/divisão/mod/e
+//   avalia_fator             -> número, variável, chamada, (expressão), nao
+// Cada uma DEVOLVE o tipo do pedaço que analisou (atributo sintetizado).
+// A 'árvore' não é montada: ela fica implícita nas chamadas recursivas, e a
+// MEPA sai em ordem posfixa (operandos primeiro, operador depois).
+// ============================================================================
 
+// ---- avalia_expressao --------------------------------------------------------
 /*
- * Análise Sintática da declaração de Funções e Procedimentos.
- * Lê e valida toda a assinatura do bloco, os parâmetros formais e o escopo interno.
+ * Porta de entrada da validação matemática e lógica.
+ * Inicia a cascata (chama expressao simples, que chama termo, que chama fator)
+ * Verifica a presença de operadores relacionais (como >, <, =) ligando as duas sub-expressões resultantes.
  */
-void analisa_subrotinas() {
-    // Fica rodando para suportar a declaração de múltiplas sub-rotinas antes do algoritmo principal
-    while (lookahead.type == TOKEN_KEYWORD && 
-          (strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
-        
-        // [MEPA] Padrão de uma sub-rotina (convenção do grupo; confirmar com a MEPA da disciplina):
-        //   DSVS L_pula          o programa principal não executa a rotina "de passagem"
-        //   L_entrada: ENPR      ponto de entrada (destino do CHPR)
-        //   ARMZ <params>        tira da pilha os argumentos empilhados por quem chamou (do último ao primeiro)
-        //   <comandos>
-        //   L_saida: NADA        destino do 'retorne'
-        //   RTPR                 volta para quem chamou
-        //   L_pula: NADA
-        // Os três rótulos são pegos no começo, antes das chamadas recursivas.
-        int rotulo_pula = proximo_rotulo();
-        int rotulo_entrada = proximo_rotulo();
-        int rotulo_saida = proximo_rotulo();
-        gera_desvio("DSVS", rotulo_pula);
+TipoDado avalia_expressao() {
+    TipoDado tipo = avalia_expressao_simples(); 
+    
+    // Testa o token no meio, se for relacional é uma validação booleana (ex: expressao_esq > expressao_dir)
+    if (lookahead.type == TOKEN_OP_REL) {
+        // Guarda o operador ANTES de consumir (para a mensagem de erro e a instrução MEPA)
+        OpRelAtributo codigo_operador = lookahead.attribute.op_code;
+        char operador[3];
+        strcpy(operador, lexema_atual);
+        int linha = lookahead.line;
+        consome(TOKEN_OP_REL); 
+        TipoDado tipo_direita = avalia_expressao_simples();
+        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5] resultado: logico
 
-        // Procedimentos (métodos void que não possuem um tipo de retorno)
-        if (strcmp(lexema_atual, "procedimento") == 0) {
-            consome_palavra("procedimento");
-            // [R2]/[R3] o nome entra no escopo ATUAL (global), ANTES de abrir o escopo do procedimento,
-            // para continuar visível depois que o escopo dele for descartado
-            verifica_nome_nao_reservado(0);
-            if (lookahead.type == TOKEN_ID) {
-                rotina_atual = insere_simbolo(lexema_atual, CAT_PROCEDIMENTO, TIPO_INDEFINIDO, lookahead.line);
-                rotina_atual->rotulo_entrada = rotulo_entrada;
-            }
-            consome(TOKEN_ID); // Consome o nome escolhido pelo usuário para o procedimento
-            abre_escopo();     // push: tabela do procedimento (parâmetros)
-            rotulo_saida_rotina = rotulo_saida;
-            gera_rotulo(rotulo_entrada, "ENPR");
-            
-            // Trata a entrada de parâmetros obrigatórios entre parênteses (ex: (a: inteiro, b: real))
-            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
-                consome_palavra("(");
-                do {
-                    // Se não for o primeiro parâmetro, então haverá uma vírgula antes do identificador
-                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
-                    analisa_parametro(); // [R2]/[R3]/[R6] nome, ':' e tipo do parâmetro
-                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0); // Repete o 'do' se encontrar outra vírgula
-                consome_palavra(")");
-            }
-            gera_armazenamento_parametros(); // [MEPA]
-            
-            consome_palavra("inicio");
-            avalia_lista_comandos();
-            consome_palavra("fimprocedimento"); 
-            gera_rotulo(rotulo_saida, "NADA");
-            gera_codigo("RTPR", NULL);
-            fecha_escopo();      // [R4] confere os parâmetros e pop
-            rotina_atual = NULL;
-            
-        } 
-        // Funções (semelhantes aos Procedimentos, porém ao final declaram um tipo de retorno obrigatório)
-        else if (strcmp(lexema_atual, "funcao") == 0) {
-            consome_palavra("funcao");
-            // [R2]/[R3] mesmo tratamento do nome do procedimento.
-            // O tipo de retorno só é conhecido depois dos parâmetros: entra como indefinido e é gravado abaixo
-            verifica_nome_nao_reservado(0);
-            if (lookahead.type == TOKEN_ID) {
-                rotina_atual = insere_simbolo(lexema_atual, CAT_FUNCAO, TIPO_INDEFINIDO, lookahead.line);
-                rotina_atual->rotulo_entrada = rotulo_entrada;
-            }
-            consome(TOKEN_ID); 
-            abre_escopo();     // push: tabela da função (parâmetros)
-            rotulo_saida_rotina = rotulo_saida;
-            gera_rotulo(rotulo_entrada, "ENPR");
-            
-            // A lógica de declaração de parâmetros é idêntica à do Procedimento
-            if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "(") == 0) {
-                consome_palavra("(");
-                do {
-                    if (strcmp(lexema_atual, ",") == 0) consome_palavra(",");
-                    analisa_parametro(); // [R2]/[R3]/[R6]
-                } while (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, ",") == 0);
-                consome_palavra(")");
-            }
-            gera_armazenamento_parametros(); // [MEPA]
-            
-            // Ao contrário dos Procedimentos, aqui obrigatoriamente declaramos o tipo que a Função vai retornar
-            consome_palavra(":");
-            // [R9] grava o tipo de retorno no nó da função (lido ANTES de consumir)
-            strcpy(rotina_atual->tipo, tipo_para_texto(lexema_para_tipo(lexema_atual)));
-            consome_tipo(); 
-            
-            consome_palavra("inicio");
-            avalia_lista_comandos();
-            consome_palavra("fimfuncao"); 
-            gera_rotulo(rotulo_saida, "NADA");
-            gera_codigo("RTPR", NULL);
-            fecha_escopo();      // [R4] confere os parâmetros e pop
-            rotina_atual = NULL;
+        // [MEPA] comparação depois dos dois operandos; deixa 1 (verdadeiro) ou 0 (falso) na pilha
+        switch (codigo_operador) {
+            case OP_LT: gera_codigo("CMME", NULL); break; // <
+            case OP_LE: gera_codigo("CMEG", NULL); break; // <=
+            case OP_EQ: gera_codigo("CMIG", NULL); break; // =
+            case OP_GT: gera_codigo("CMMA", NULL); break; // >
+            case OP_GE: gera_codigo("CMAG", NULL); break; // >=
+            case OP_NE: gera_codigo("CMDG", NULL); break; // <>
         }
-        gera_rotulo(rotulo_pula, "NADA");
     }
+
+    return tipo;
 }
 
-// ============================================================================
-// AVALIAÇÃO DE EXPRESSÕES E PRECEDÊNCIA MATEMÁTICA
-// O coração da lógica LL(1) e onde a recursão acontece pesadamente.
-// A gramática exige avaliar as expressões seguindo a hierarquia correta:
-// 1º Parênteses (resolvidos primeiro por recursão em fator)
-// 2º Multiplicação/Divisão (Termo)
-// 3º Soma/Subtração (Expressão Simples)
-// 4º Operadores Relacionais (Expressão Base)
-// ============================================================================
+// ---- avalia_expressao_simples ------------------------------------------------
+/*
+ * Resolve somas e subtrações (Expressão Simples).
+ */
+TipoDado avalia_expressao_simples() {
+    TipoDado tipo = avalia_termo(); // Primeiramente chama o termo, que resolve a multiplicação, e retorna para ser somado
+    
+    // Semelhante à multiplicação, o laço resolve as operações aditivas sucessivas (ex: 5 + 2 - 2)
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "+") == 0 || strcmp(lexema_atual, "-") == 0 || 
+           strcmp(lexema_atual, "OU") == 0)) {
+        
+        char operador[10];
+        strcpy(operador, lexema_atual);
+        int linha = lookahead.line;
+        consome_palavra(operador); // Consome o operador de adição (+)
+        TipoDado tipo_direita = avalia_termo(); // Encapsula os termos em cascata
+        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5]
 
+        // [MEPA] operador depois dos dois operandos
+        if (strcmp(operador, "+") == 0)      gera_codigo("SOMA", NULL);
+        else if (strcmp(operador, "-") == 0) gera_codigo("SUBT", NULL);
+        else                                 gera_codigo("DISJ", NULL); // OU
+    }
+
+    return tipo;
+}
+
+// ---- avalia_termo ------------------------------------------------------------
+/*
+ * Resolve multiplicações e divisões (Termo).
+ * Funciona como intermediário entre a soma/subtração e o fator base.
+ * Garante que a multiplicação ocorra antes da soma.
+ */
+TipoDado avalia_termo() {
+    TipoDado tipo = avalia_fator(); // Primeiramente avalia o termo da esquerda
+    
+    // O laço agrupa e resolve as operações multiplicativas sucessivas (ex: 5 * 2 / 2)
+    while (lookahead.type == TOKEN_KEYWORD && 
+          (strcmp(lexema_atual, "*") == 0 || strcmp(lexema_atual, "/") == 0 || 
+           strcmp(lexema_atual, "\\") == 0 || strcmp(lexema_atual, "MOD") == 0 || 
+           strcmp(lexema_atual, "E") == 0)) {
+        
+        char operador[10];
+        strcpy(operador, lexema_atual);
+        int linha = lookahead.line;
+        consome_palavra(operador); // Consome o operador (*)
+        TipoDado tipo_direita = avalia_fator(); // Processa e encadeia o número ou expressão à direita da multiplicação
+        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5]
+
+        // [MEPA] o operador vem DEPOIS dos dois operandos (notação posfixa)
+        if (strcmp(operador, "*") == 0)        gera_codigo("MULT", NULL);
+        else if (strcmp(operador, "/") == 0)   gera_codigo("DIVF", NULL); // divisão real
+        else if (strcmp(operador, "\\") == 0) gera_codigo("DIVI", NULL); // divisão inteira
+        else if (strcmp(operador, "MOD") == 0) gera_codigo("MODI", NULL); // resto (depende da MEPA da disciplina)
+        else                                   gera_codigo("CONJ", NULL); // E
+    }
+
+    return tipo;
+}
+
+// ---- avalia_fator ------------------------------------------------------------
 /*
  * Base da expressão (Fator). É o pilar das resoluções matemáticas.
  * Consome a unidade atômica mais simples (um número, uma variável) ou resolve chamadas fechadas com parênteses.
@@ -1893,229 +1731,580 @@ TipoDado avalia_fator() {
     return tipo; // [R5] sobe para quem chamou (atributo sintetizado)
 }
 
-/*
- * Resolve multiplicações e divisões (Termo).
- * Funciona como intermediário entre a soma/subtração e o fator base.
- * Garante que a multiplicação ocorra antes da soma.
- */
-TipoDado avalia_termo() {
-    TipoDado tipo = avalia_fator(); // Primeiramente avalia o termo da esquerda
-    
-    // O laço agrupa e resolve as operações multiplicativas sucessivas (ex: 5 * 2 / 2)
-    while (lookahead.type == TOKEN_KEYWORD && 
-          (strcmp(lexema_atual, "*") == 0 || strcmp(lexema_atual, "/") == 0 || 
-           strcmp(lexema_atual, "\\") == 0 || strcmp(lexema_atual, "MOD") == 0 || 
-           strcmp(lexema_atual, "E") == 0)) {
-        
-        char operador[10];
-        strcpy(operador, lexema_atual);
-        int linha = lookahead.line;
-        consome_palavra(operador); // Consome o operador (*)
-        TipoDado tipo_direita = avalia_fator(); // Processa e encadeia o número ou expressão à direita da multiplicação
-        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5]
-
-        // [MEPA] o operador vem DEPOIS dos dois operandos (notação posfixa)
-        if (strcmp(operador, "*") == 0)        gera_codigo("MULT", NULL);
-        else if (strcmp(operador, "/") == 0)   gera_codigo("DIVF", NULL); // divisão real
-        else if (strcmp(operador, "\\") == 0) gera_codigo("DIVI", NULL); // divisão inteira
-        else if (strcmp(operador, "MOD") == 0) gera_codigo("MODI", NULL); // resto (depende da MEPA da disciplina)
-        else                                   gera_codigo("CONJ", NULL); // E
-    }
-
-    return tipo;
-}
-
-/*
- * Resolve somas e subtrações (Expressão Simples).
- */
-TipoDado avalia_expressao_simples() {
-    TipoDado tipo = avalia_termo(); // Primeiramente chama o termo, que resolve a multiplicação, e retorna para ser somado
-    
-    // Semelhante à multiplicação, o laço resolve as operações aditivas sucessivas (ex: 5 + 2 - 2)
-    while (lookahead.type == TOKEN_KEYWORD && 
-          (strcmp(lexema_atual, "+") == 0 || strcmp(lexema_atual, "-") == 0 || 
-           strcmp(lexema_atual, "OU") == 0)) {
-        
-        char operador[10];
-        strcpy(operador, lexema_atual);
-        int linha = lookahead.line;
-        consome_palavra(operador); // Consome o operador de adição (+)
-        TipoDado tipo_direita = avalia_termo(); // Encapsula os termos em cascata
-        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5]
-
-        // [MEPA] operador depois dos dois operandos
-        if (strcmp(operador, "+") == 0)      gera_codigo("SOMA", NULL);
-        else if (strcmp(operador, "-") == 0) gera_codigo("SUBT", NULL);
-        else                                 gera_codigo("DISJ", NULL); // OU
-    }
-
-    return tipo;
-}
-
-/*
- * Porta de entrada da validação matemática e lógica.
- * Inicia a cascata (chama expressao simples, que chama termo, que chama fator)
- * Verifica a presença de operadores relacionais (como >, <, =) ligando as duas sub-expressões resultantes.
- */
-TipoDado avalia_expressao() {
-    TipoDado tipo = avalia_expressao_simples(); 
-    
-    // Testa o token no meio, se for relacional é uma validação booleana (ex: expressao_esq > expressao_dir)
-    if (lookahead.type == TOKEN_OP_REL) {
-        // Guarda o operador ANTES de consumir (para a mensagem de erro e a instrução MEPA)
-        OpRelAtributo codigo_operador = lookahead.attribute.op_code;
-        char operador[3];
-        strcpy(operador, lexema_atual);
-        int linha = lookahead.line;
-        consome(TOKEN_OP_REL); 
-        TipoDado tipo_direita = avalia_expressao_simples();
-        tipo = verifica_operacao(tipo, operador, tipo_direita, linha); // [R5] resultado: logico
-
-        // [MEPA] comparação depois dos dois operandos; deixa 1 (verdadeiro) ou 0 (falso) na pilha
-        switch (codigo_operador) {
-            case OP_LT: gera_codigo("CMME", NULL); break; // <
-            case OP_LE: gera_codigo("CMEG", NULL); break; // <=
-            case OP_EQ: gera_codigo("CMIG", NULL); break; // =
-            case OP_GT: gera_codigo("CMMA", NULL); break; // >
-            case OP_GE: gera_codigo("CMAG", NULL); break; // >=
-            case OP_NE: gera_codigo("CMDG", NULL); break; // <>
-        }
-    }
-
-    return tipo;
-}
-
-/*
- * FASE 2: um argumento do 'leia'.
- * Precisa ser uma variável (ou elemento de vetor), que RECEBE o valor lido.
- * [R1] declarada   [R4] marcada como atribuída
- * [MEPA] LEIT empilha o valor lido e ARMZ (ou ARMI, no vetor) guarda na variável
- */
-void avalia_argumento_leia() {
-    int linha = lookahead.line;
-    char mensagem[200];
-
-    if (lookahead.type != TOKEN_ID) {
-        snprintf(mensagem, sizeof(mensagem), "'leia' exige uma variável, mas recebeu '%s'", lexema_atual);
-        erro_semantico(linha, mensagem);
-    }
-    TNo *simbolo = busca_nome_usado(); // [R1]
-    char nome[TAM_ID];
-    strcpy(nome, simbolo->ID);
-    if (simbolo->categoria != CAT_VARIAVEL && simbolo->categoria != CAT_PARAMETRO) {
-        snprintf(mensagem, sizeof(mensagem), "'%s' não é uma variável", nome);
-        erro_semantico(linha, mensagem);
-    }
-    consome(TOKEN_ID);
-
-    int acessou_vetor = 0;
-    if (lookahead.type == TOKEN_KEYWORD && strcmp(lexema_atual, "[") == 0) {
-        if (!simbolo->eh_vetor) {
-            snprintf(mensagem, sizeof(mensagem), "'%s' não é um vetor", nome);
-            erro_semantico(linha, mensagem);
-        }
-        consome_palavra("[");
-        verifica_inteiro(avalia_expressao(), "O índice do vetor", linha);
-        consome_palavra("]");
-        acessou_vetor = 1;
-    }
-
-    simbolo->atribuida = 1; // [R4]
-    gera_codigo("LEIT", NULL);
-    gera_codigo(acessou_vetor ? "ARMI" : "ARMZ", nome);
-}
 
 // ============================================================================
-// FUNÇÃO PRINCIPAL (MAIN)
-// O sistema inicia aqui. Recebemos o arquivo-fonte como argumento (argv).
+// PARTE 8: SEMÂNTICO (a): ERROS E TIPOS
+// ============================================================================
+// Como um erro semântico é avisado e como os tipos são convertidos entre
+// texto (o que fica na tabela) e TipoDado (o que o código compara).
 // ============================================================================
 
-int main(int argc, char *argv[]) {
-    // Validação inicial para evitar que o compilador crashe sem o nome do arquivo-fonte
-    // O argc conta quantos parâmetros foram escritos no console; o mínimo é 2 (compilador.exe e arquivo.txt)
-    if (argc < 2) {
-        printf("Erro: Ficheiro fonte nao informado.\n");
-        printf("Uso: %s <nome_do_arquivo.txt>\n", argv[0]);
-        return 1;
+// ---- erro_semantico ----------------------------------------------------------
+/*
+ * Imprime um erro semântico e encerra a compilação.
+ * Formato igual ao dos outros erros:
+ *   ERRO SEMÂNTICO
+ *   Linha: N
+ *   <mensagem>
+ * Quem chama monta a mensagem (ex.: com snprintf "Variável 'x' não declarada").
+ */
+void erro_semantico(int linha, const char *mensagem) {
+    // Mesmo formato do ERRO LÉXICO e do ERRO SINTÁTICO
+    printf("ERRO SEMÂNTICO\n");
+    printf("Linha: %d\n", linha);
+    printf("%s\n", mensagem);
+
+    // Fecha os arquivos que estiverem abertos, para não deixar saída pela metade sem gravar
+    if (arquivo_saida) { fclose(arquivo_saida); arquivo_saida = NULL; }
+    if (arquivo_mepa)  { fclose(arquivo_mepa);  arquivo_mepa  = NULL; }
+
+    // Mesmo código de saída dos erros léxico e sintático (exit(1)).
+    // DÚVIDA PARA O PROFESSOR: se o programa deve terminar com 0 também em caso de erro, trocar aqui.
+    exit(1);
+}
+
+// ---- lexema_para_tipo --------------------------------------------------------
+/*
+ * Converte a palavra reservada de tipo ("inteiro", "real", "caractere", "logico")
+ * no TipoDado correspondente. Usada nas declarações.
+ */
+TipoDado lexema_para_tipo(const char *lexema) {
+    // O léxico diferencia maiúsculas de minúsculas, então a comparação é exata (strcmp)
+    if (strcmp(lexema, "inteiro") == 0)   return TIPO_INTEIRO;
+    if (strcmp(lexema, "real") == 0)      return TIPO_REAL;
+    if (strcmp(lexema, "caractere") == 0) return TIPO_CARACTERE;
+    if (strcmp(lexema, "logico") == 0)    return TIPO_LOGICO;
+    return TIPO_INDEFINIDO; // não é palavra de tipo
+}
+
+// ---- tipo_para_texto ---------------------------------------------------------
+/*
+ * Converte um TipoDado no texto guardado no campo 'tipo' do TNo.
+ * ATENÇÃO: o campo tem 7 posições (6 letras + '\0'), então "inteiro" (7 letras)
+ * e "caractere" (9 letras) não cabem. Por isso usamos abreviações:
+ *   inteiro -> "int"   real -> "real"   caractere -> "char"   logico -> "logico"
+ * DÚVIDA PARA O PROFESSOR: confirmar se essas abreviações são aceitas.
+ */
+const char *tipo_para_texto(TipoDado tipo) {
+    switch (tipo) {
+        case TIPO_INTEIRO:   return "int";
+        case TIPO_REAL:      return "real";
+        case TIPO_CARACTERE: return "char";
+        case TIPO_LOGICO:    return "logico";
+        default:             return ""; // TIPO_INDEFINIDO (ex.: procedimento, que não tem tipo)
     }
+}
 
-    // Abre o código-fonte que o usuário apontou, operando apenas em modo "r" (Read/Leitura)
-    FILE *arquivo_fonte = fopen(argv[1], "r");
-    if (arquivo_fonte == NULL) {
-        printf("Erro: Nao foi possivel abrir o ficheiro %s\n", argv[1]);
-        return 1;
+// ---- texto_para_tipo ---------------------------------------------------------
+/*
+ * Converte o texto do campo 'tipo' do TNo de volta para TipoDado.
+ * Usada quando um símbolo é encontrado na tabela e precisamos do seu tipo.
+ */
+TipoDado texto_para_tipo(const char *texto) {
+    // Inverso de tipo_para_texto(): usa as mesmas abreviações
+    if (strcmp(texto, "int") == 0)    return TIPO_INTEIRO;
+    if (strcmp(texto, "real") == 0)   return TIPO_REAL;
+    if (strcmp(texto, "char") == 0)   return TIPO_CARACTERE;
+    if (strcmp(texto, "logico") == 0) return TIPO_LOGICO;
+    return TIPO_INDEFINIDO; // texto vazio ou desconhecido
+}
+
+// ---- nome_do_tipo ------------------------------------------------------------
+/* Nome completo do tipo, usado nas mensagens de erro (o TNo guarda a abreviação). */
+const char *nome_do_tipo(TipoDado tipo) {
+    switch (tipo) {
+        case TIPO_INTEIRO:   return "inteiro";
+        case TIPO_REAL:      return "real";
+        case TIPO_CARACTERE: return "caractere";
+        case TIPO_LOGICO:    return "logico";
+        default:             return "indefinido";
     }
+}
 
-    // ------------------------------------------------------------------------
-    // PREPARAÇÃO DE MEMÓRIA DINÂMICA
-    // Calcula a quantidade exata de caracteres do arquivo para alocar (malloc) 
-    // a memória estritamente necessária, evitando buffer overflow/overread.
-    // ------------------------------------------------------------------------
-    
-    fseek(arquivo_fonte, 0, SEEK_END);          // Joga o cursor invisível de leitura até o fim do txt
-    long tamanho_ficheiro = ftell(arquivo_fonte); // Pergunta "qual a distância daqui pro começo?", pegando o tamanho do txt
-    rewind(arquivo_fonte);                      // Devolve o cursor lá pro começo para lermos o conteúdo depois
+// ---- eh_numerico -------------------------------------------------------------
+/* 1 se o tipo é numérico (inteiro ou real) */
+int eh_numerico(TipoDado tipo) {
+    return tipo == TIPO_INTEIRO || tipo == TIPO_REAL;
+}
 
-    // Aloca (tamanho + 1) para caber o '\0' que encerra strings no C
-    codigo_fonte = (char *)malloc((tamanho_ficheiro + 1) * sizeof(char));
-    if (codigo_fonte == NULL) {
-        printf("Erro: Falha na alocacao de memoria para o codigo_fonte.\n");
-        fclose(arquivo_fonte);
-        return 1;
-    }
+// ---- tipos_compativeis -------------------------------------------------------
+/*
+ * Um valor do tipo 'origem' pode ser guardado num lugar do tipo 'destino'?
+ * Tipos iguais sempre podem. A única conversão aceita é inteiro -> real
+ * (o inteiro cabe no real sem perder nada; o contrário perderia a parte decimal).
+ */
+int tipos_compativeis(TipoDado destino, TipoDado origem) {
+    return destino == origem || (destino == TIPO_REAL && origem == TIPO_INTEIRO);
+}
 
-    // Passa todo o texto para a string global em uma só tacada e fecha o arquivo original por segurança
-    size_t lidos = fread(codigo_fonte, sizeof(char), tamanho_ficheiro, arquivo_fonte);
-    codigo_fonte[lidos] = '\0'; // Carimba o final com segurança
-    fclose(arquivo_fonte);
 
-    // Abre (ou cria) um arquivo de saída limpo para gravar a tabela de tokens processada pelo Léxico
-    arquivo_saida = fopen("saida_tokens.txt", "w");
+// ============================================================================
+// PARTE 9: SEMÂNTICO (b): TABELA DE SÍMBOLOS
+// ============================================================================
+// Pilha de escopos (TEscopo ligados por 'anterior'); cada escopo tem uma
+// lista encadeada de símbolos (TNo ligados por 'prox').
+//   abre_escopo/fecha_escopo -> empilhar / desempilhar
+//   insere_simbolo           -> INSERIR no topo  (checa [R3])
+//   busca_*                  -> BUSCAR do topo para a base (shadowing)
+// ============================================================================
 
-    // FASE 2 [MEPA]: arquivo com o código intermediário gerado
-    arquivo_mepa = fopen("saida_mepa.txt", "w");
-    if (arquivo_mepa == NULL) {
-        printf("Erro: Nao foi possivel criar o arquivo saida_mepa.txt\n");
-        free(codigo_fonte);
-        if (arquivo_saida != NULL) fclose(arquivo_saida);
-        return 1;
-    }
-
-    // FASE 2: cria a tabela do escopo GLOBAL (base da pilha) antes de começar a análise
-    abre_escopo();
-
-    // Dá o pontapé inicial no sistema LL(1): carrega o primeiro token preenchendo o lookahead
-    // e na sequência chama o Analisador Sintático para validar esse lookahead
-    nextToken(); 
-    analisa_algoritmo_principal();
-    
-    // Validação especial de EOF Lock:
-    // Uma vez finalizada a análise de regras gramaticais, obrigatoriamente a leitura deve parar no EOF.
-    // Caso a gramática seja bem sucedida, mas acuse que ainda tem token sobrando/sujeira fora de escopo, levanta erro.
-    if (lookahead.type != TOKEN_EOF) {
-        printf("ERRO SINTÁTICO\n");
-        printf("Linha: %d\n", lookahead.line);
-        printf("Encontrado lixo após o 'fimalgoritmo': %s\n", lexema_atual);
+// ---- abre_escopo -------------------------------------------------------------
+/*
+ * Empilha uma tabela vazia: início do programa (escopo global)
+ * e início de cada procedimento/função.
+ */
+void abre_escopo(void) {
+    TEscopo *novo = (TEscopo *)malloc(sizeof(TEscopo));
+    if (novo == NULL) {
+        printf("Erro: Falha na alocacao de memoria para a tabela de simbolos.\n");
         exit(1);
     }
-    
-    // FASE 2 [R4]: verifica as variáveis globais atribuídas e não usadas e libera a tabela global
-    fecha_escopo();
+    novo->inicio = NULL;            // tabela começa vazia
+    novo->proximo_endereco = 0;     // a primeira variável deste escopo terá endereço 0
+    novo->anterior = topo_escopo;   // o escopo que era o topo fica "embaixo" deste
+    topo_escopo = novo;             // push: a nova tabela vira o topo da pilha
+}
 
-    // [MEPA] libera a memória das globais e encerra o programa MEPA
-    if (total_memoria_global > 0) gera_codigo_numero("DMEM", total_memoria_global);
-    gera_codigo("PARA", NULL);
-    fclose(arquivo_mepa);
-    arquivo_mepa = NULL;
+// ---- fecha_escopo ------------------------------------------------------------
+/*
+ * Desempilha a tabela do topo: fim de cada sub-rotina e fim do programa.
+ * Antes de liberar, verifica a regra [R4] para os símbolos deste escopo.
+ */
+void fecha_escopo(void) {
+    if (topo_escopo == NULL) return;
 
-    // Se o código passar vivo por todas as funções do analisador sem acionar nenhum erro
-    // (léxico, sintático ou semântico), ele está validado e o código MEPA foi gerado.
-    printf("Compilação concluída com sucesso. Código sem erros léxicos, sintáticos ou semânticos!\n");
-    printf("Código MEPA gerado em saida_mepa.txt\n");
+    verifica_variaveis_nao_usadas(topo_escopo); // [R4]
 
-    // Limpa a memória alocada e solta o txt de saída antes de encerrar
-    free(codigo_fonte);
-    if (arquivo_saida != NULL) fclose(arquivo_saida);
+    // Libera cada nó da lista encadeada deste escopo
+    TNo *atual = topo_escopo->inicio;
+    while (atual != NULL) {
+        TNo *proximo = atual->prox;
+        free(atual);
+        atual = proximo;
+    }
 
-    return 0; // Finaliza o sistema retornando código 0 de encerramento saudável
+    // pop: o escopo de baixo volta a ser o topo
+    TEscopo *removido = topo_escopo;
+    topo_escopo = topo_escopo->anterior;
+    free(removido);
+}
+
+// ---- mesmo_nome --------------------------------------------------------------
+/*
+ * Compara o nome guardado no TNo com um nome lido do programa.
+ * O campo ID[16] guarda no máximo 15 caracteres, então nomes maiores ficam
+ * guardados só com os 15 primeiros (ex.: "linha_decorativa", do anexo do
+ * enunciado, tem 16). Por isso a comparação usa só os 15 primeiros caracteres.
+ */
+int mesmo_nome(const char *guardado, const char *lido) {
+    return strncmp(guardado, lido, TAM_ID - 1) == 0;
+}
+
+// ---- busca_no_escopo_atual ---------------------------------------------------
+/*
+ * Procura um identificador SOMENTE na tabela do topo.
+ * Usada na declaração, para detectar redeclaração no mesmo escopo [R3].
+ * Devolve o nó ou NULL.
+ */
+TNo *busca_no_escopo_atual(const char *id) {
+    if (topo_escopo == NULL) return NULL;
+    for (TNo *no = topo_escopo->inicio; no != NULL; no = no->prox) {
+        if (mesmo_nome(no->ID, id)) return no;
+    }
+    return NULL;
+}
+
+// ---- busca_simbolo -----------------------------------------------------------
+/*
+ * Resolução de nomes: procura do topo da pilha até o escopo global.
+ * Devolve o nó encontrado ou NULL (não gera erro).
+ * Como a busca começa no topo, um nome local "esconde" um global de mesmo nome.
+ */
+TNo *busca_simbolo(const char *id) {
+    for (TEscopo *escopo = topo_escopo; escopo != NULL; escopo = escopo->anterior) {
+        for (TNo *no = escopo->inicio; no != NULL; no = no->prox) {
+            if (mesmo_nome(no->ID, id)) return no;
+        }
+    }
+    return NULL;
+}
+
+// ---- busca_tabela_simbolos ---------------------------------------------------
+/*
+ * Função exigida pelo enunciado.
+ * Recebe o lexema do token corrente (o ID) e devolve o endereço da variável.
+ * Se o identificador não estiver em nenhuma tabela, gera erro semântico [R1].
+ * Deve ser chamada ANTES de consumir o ID, enquanto lexema_atual e
+ * lookahead.line ainda se referem a ele.
+ * (Procedimentos e funções não ocupam endereço: para eles devolve -1.)
+ */
+int busca_tabela_simbolos(const char *atributo_ID) {
+    TNo *no = busca_simbolo(atributo_ID);
+    if (no == NULL) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem), "Identificador '%s' não declarado", atributo_ID);
+        erro_semantico(lookahead.line, mensagem);
+        return -1; // não chega aqui: erro_semantico encerra o programa
+    }
+    return no->endereco;
+}
+
+// ---- busca_nome_usado --------------------------------------------------------
+/*
+ * Procura um nome usado no corpo do programa.
+ * Primeiro chama busca_tabela_simbolos() (exigida pelo enunciado), que gera o
+ * erro [R1] se o nome não existir; depois devolve o nó, para as outras regras
+ * consultarem categoria e tipo. Deve ser chamada ANTES de consumir o ID.
+ */
+TNo *busca_nome_usado(void) {
+    busca_tabela_simbolos(lexema_atual); // [R1]
+    return busca_simbolo(lexema_atual);
+}
+
+// ---- insere_simbolo ----------------------------------------------------------
+/*
+ * Insere um símbolo na tabela do topo.
+ * - [R3] se já existir no escopo atual -> erro semântico de redeclaração
+ * - nomes com mais de 15 letras não cabem em ID[16]: são guardados com os
+ *   15 primeiros caracteres (o anexo do enunciado usa "linha_decorativa", com 16)
+ * - variáveis e parâmetros recebem endereço = ordem de declaração no escopo;
+ *   procedimentos e funções não ocupam memória de dados (endereço -1)
+ * - o nó é encadeado no FIM da lista, para a lista ficar na ordem de declaração
+ * Devolve o nó criado (usado depois para adicionar parâmetros às rotinas).
+ */
+TNo *insere_simbolo(const char *id, Categoria categoria, TipoDado tipo, int linha) {
+    char mensagem[200];
+
+    if (busca_no_escopo_atual(id) != NULL) { // [R3]
+        snprintf(mensagem, sizeof(mensagem), "Identificador '%s' já declarado neste escopo", id);
+        erro_semantico(linha, mensagem);
+    }
+
+    TNo *novo = (TNo *)malloc(sizeof(TNo));
+    if (novo == NULL) {
+        printf("Erro: Falha na alocacao de memoria para a tabela de simbolos.\n");
+        exit(1);
+    }
+
+    // Campos exigidos pelo enunciado
+    strncpy(novo->ID, id, TAM_ID - 1);   // no máximo 15 caracteres
+    novo->ID[TAM_ID - 1] = '\0';
+    strcpy(novo->tipo, tipo_para_texto(tipo));
+    if (categoria == CAT_VARIAVEL || categoria == CAT_PARAMETRO) {
+        novo->endereco = topo_escopo->proximo_endereco++;
+    } else {
+        novo->endereco = -1;
+    }
+    novo->prox = NULL;
+
+    // Campos acrescentados na fase 2
+    novo->categoria = categoria;
+    novo->eh_vetor = 0;
+    novo->num_params = 0;
+    novo->atribuida = (categoria == CAT_PARAMETRO); // parâmetro já chega com o valor passado na chamada
+    novo->usada = 0;
+    novo->linha_declaracao = linha;
+    novo->rotulo_entrada = 0;
+
+    // Encadeia no fim da lista do topo
+    if (topo_escopo->inicio == NULL) {
+        topo_escopo->inicio = novo;
+    } else {
+        TNo *ultimo = topo_escopo->inicio;
+        while (ultimo->prox != NULL) ultimo = ultimo->prox;
+        ultimo->prox = novo;
+    }
+    return novo;
+}
+
+// ---- adiciona_parametro ------------------------------------------------------
+/*
+ * Registra o tipo de mais um parâmetro na rotina (procedimento/função).
+ * Chamada na declaração dos parâmetros; usada depois na checagem [R6].
+ */
+void adiciona_parametro(TNo *rotina, TipoDado tipo, int linha) {
+    if (rotina->num_params >= MAX_PARAMS) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem),
+                 "A rotina '%s' excede o limite de %d parâmetros", rotina->ID, MAX_PARAMS);
+        erro_semantico(linha, mensagem);
+    }
+    rotina->tipos_params[rotina->num_params++] = tipo;
+}
+
+
+// ============================================================================
+// PARTE 10: SEMÂNTICO (c): AS REGRAS R1-R9
+// ============================================================================
+// Funções pequenas, cada uma verificando uma regra. O parser as chama no
+// momento certo e elas param a compilação se a regra for violada.
+// ============================================================================
+
+// ---- eh_palavra_reservada ----------------------------------------------------
+/*
+ * [R2] Verifica se um lexema é palavra reservada.
+ * A lista é a mesma usada em obterToken() (que ficou como na Fase 1).
+ */
+int eh_palavra_reservada(const char *lexema) {
+    static const char *reservadas[] = {
+        "algoritmo", "var", "inicio", "fimalgoritmo", "se", "entao", "senao", "fimse",
+        "escreva", "escreval", "leia", "enquanto", "faca", "fimenquanto",
+        "para", "de", "ate", "passo", "fimpara",
+        "inteiro", "real", "caractere", "logico", "vetor",
+        "procedimento", "fimprocedimento", "funcao", "retorne", "fimfuncao",
+        "verdadeiro", "falso", "MOD", "E", "OU"
+    };
+    int quantidade = sizeof(reservadas) / sizeof(reservadas[0]);
+    for (int i = 0; i < quantidade; i++) {
+        if (strcmp(lexema, reservadas[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+// ---- verifica_nome_nao_reservado ---------------------------------------------
+/*
+ * [R2] Chamada nos pontos em que a gramática espera o NOME de algo novo
+ * (variável, parâmetro, procedimento ou função).
+ * Se no lugar do nome veio uma palavra reservada, o erro é SEMÂNTICO
+ * (sem esta checagem ele apareceria como sintático).
+ * 'aceita_fim_do_bloco' = 1 no começo de cada linha do bloco 'var', onde
+ * 'inicio', 'var', 'procedimento' e 'funcao' encerram o bloco normalmente.
+ */
+void verifica_nome_nao_reservado(int aceita_fim_do_bloco) {
+    if (lookahead.type != TOKEN_KEYWORD || !eh_palavra_reservada(lexema_atual)) return;
+
+    if (aceita_fim_do_bloco &&
+        (strcmp(lexema_atual, "inicio") == 0 || strcmp(lexema_atual, "var") == 0 ||
+         strcmp(lexema_atual, "procedimento") == 0 || strcmp(lexema_atual, "funcao") == 0)) {
+        return;
+    }
+
+    char mensagem[200];
+    snprintf(mensagem, sizeof(mensagem),
+             "Palavra reservada '%s' não pode ser usada como nome", lexema_atual);
+    erro_semantico(lookahead.line, mensagem);
+}
+
+// ---- verifica_operacao -------------------------------------------------------
+/*
+ * [R5] Verifica se um operador pode ser aplicado aos dois tipos e devolve
+ * o tipo do resultado:
+ *   + - *            numérico com numérico -> inteiro se os dois forem inteiros, senão real
+ *   /                numérico com numérico -> real
+ *   \ e MOD          inteiro com inteiro   -> inteiro
+ *   E, OU            logico com logico     -> logico
+ *   < <= > >=        numérico com numérico -> logico
+ *   = <>             numérico com numérico, ou dois valores do mesmo tipo -> logico
+ * Se forem incompatíveis -> erro semântico.
+ */
+TipoDado verifica_operacao(TipoDado esquerda, const char *operador, TipoDado direita, int linha) {
+    TipoDado resultado = TIPO_INDEFINIDO;
+    int ambos_numericos = eh_numerico(esquerda) && eh_numerico(direita);
+
+    if (strcmp(operador, "+") == 0 || strcmp(operador, "-") == 0 || strcmp(operador, "*") == 0) {
+        if (ambos_numericos) {
+            resultado = (esquerda == TIPO_INTEIRO && direita == TIPO_INTEIRO) ? TIPO_INTEIRO : TIPO_REAL;
+        }
+    } else if (strcmp(operador, "/") == 0) {
+        if (ambos_numericos) resultado = TIPO_REAL;
+    } else if (strcmp(operador, "\\") == 0 || strcmp(operador, "MOD") == 0) {
+        if (esquerda == TIPO_INTEIRO && direita == TIPO_INTEIRO) resultado = TIPO_INTEIRO;
+    } else if (strcmp(operador, "E") == 0 || strcmp(operador, "OU") == 0) {
+        if (esquerda == TIPO_LOGICO && direita == TIPO_LOGICO) resultado = TIPO_LOGICO;
+    } else if (strcmp(operador, "=") == 0 || strcmp(operador, "<>") == 0) {
+        if (ambos_numericos || esquerda == direita) resultado = TIPO_LOGICO;
+    } else { // < <= > >=
+        if (ambos_numericos) resultado = TIPO_LOGICO;
+    }
+
+    if (resultado == TIPO_INDEFINIDO) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem), "Tipos incompatíveis: %s %s %s",
+                 nome_do_tipo(esquerda), operador, nome_do_tipo(direita));
+        erro_semantico(linha, mensagem);
+    }
+    return resultado;
+}
+
+// ---- verifica_atribuicao -----------------------------------------------------
+/*
+ * [R5] Verifica se o valor de uma expressão pode ser atribuído à variável.
+ * Decisão do grupo: real <- inteiro é permitido; inteiro <- real não.
+ */
+void verifica_atribuicao(TipoDado destino, TipoDado origem, const char *nome, int linha) {
+    if (!tipos_compativeis(destino, origem)) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem),
+                 "Atribuição incompatível: a variável '%s' é %s e o valor é %s",
+                 nome, nome_do_tipo(destino), nome_do_tipo(origem));
+        erro_semantico(linha, mensagem);
+    }
+}
+
+// ---- verifica_condicao -------------------------------------------------------
+/*
+ * Verifica se a condição de 'se' / 'enquanto' é do tipo lógico.
+ */
+void verifica_condicao(TipoDado tipo, const char *comando, int linha) {
+    if (tipo != TIPO_LOGICO) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem),
+                 "A condição do '%s' deve ser logico, mas é %s", comando, nome_do_tipo(tipo));
+        erro_semantico(linha, mensagem);
+    }
+}
+
+// ---- verifica_inteiro --------------------------------------------------------
+/*
+ * [R5] Usada no 'para' e no índice de vetor: o valor precisa ser inteiro.
+ */
+void verifica_inteiro(TipoDado tipo, const char *o_que, int linha) {
+    if (tipo != TIPO_INTEIRO) {
+        char mensagem[200];
+        snprintf(mensagem, sizeof(mensagem), "%s deve ser inteiro, mas é %s", o_que, nome_do_tipo(tipo));
+        erro_semantico(linha, mensagem);
+    }
+}
+
+// ---- verifica_argumentos -----------------------------------------------------
+/*
+ * [R6] Compara os argumentos de uma chamada com os parâmetros da rotina:
+ * mesma quantidade e tipos compatíveis, na mesma ordem.
+ */
+void verifica_argumentos(TNo *rotina, TipoDado tipos_args[], int num_args, int linha) {
+    char mensagem[200];
+
+    if (num_args != rotina->num_params) {
+        snprintf(mensagem, sizeof(mensagem), "'%s' recebeu %d argumento(s); esperado(s) %d",
+                 rotina->ID, num_args, rotina->num_params);
+        erro_semantico(linha, mensagem);
+    }
+    for (int i = 0; i < num_args; i++) {
+        if (!tipos_compativeis(rotina->tipos_params[i], tipos_args[i])) {
+            snprintf(mensagem, sizeof(mensagem), "Argumento %d de '%s': esperado %s, recebido %s",
+                     i + 1, rotina->ID, nome_do_tipo(rotina->tipos_params[i]), nome_do_tipo(tipos_args[i]));
+            erro_semantico(linha, mensagem);
+        }
+    }
+}
+
+// ---- verifica_retorno --------------------------------------------------------
+/*
+ * [R9] Verifica o 'retorne': precisa estar dentro de uma função e o tipo
+ * da expressão precisa ser compatível com o tipo declarado da função.
+ */
+void verifica_retorno(TipoDado tipo_retornado, int linha) {
+    char mensagem[200];
+
+    if (rotina_atual == NULL || rotina_atual->categoria != CAT_FUNCAO) {
+        erro_semantico(linha, "'retorne' fora de uma função");
+        return; // não chega aqui: erro_semantico encerra o programa
+    }
+    TipoDado tipo_funcao = texto_para_tipo(rotina_atual->tipo);
+    if (!tipos_compativeis(tipo_funcao, tipo_retornado)) {
+        snprintf(mensagem, sizeof(mensagem),
+                 "Retorno incompatível: a função '%s' é %s e o valor é %s",
+                 rotina_atual->ID, nome_do_tipo(tipo_funcao), nome_do_tipo(tipo_retornado));
+        erro_semantico(linha, mensagem);
+    }
+}
+
+// ---- verifica_variaveis_nao_usadas -------------------------------------------
+/*
+ * [R4] Percorre a tabela de um escopo procurando variáveis que receberam
+ * valor (atribuida == 1) mas nunca foram usadas (usada == 0).
+ * Chamada por fecha_escopo() antes de liberar a tabela.
+ * Decisão do grupo: variável declarada e nunca atribuída NÃO é erro
+ * (o enunciado só fala de variável "com valor atribuído").
+ */
+void verifica_variaveis_nao_usadas(TEscopo *escopo) {
+    for (TNo *no = escopo->inicio; no != NULL; no = no->prox) {
+        if ((no->categoria == CAT_VARIAVEL || no->categoria == CAT_PARAMETRO) &&
+            no->atribuida && !no->usada) {
+            char mensagem[200];
+            snprintf(mensagem, sizeof(mensagem), "%s '%s' recebeu valor mas nunca foi usado(a)",
+                     no->categoria == CAT_PARAMETRO ? "Parâmetro" : "Variável", no->ID);
+            erro_semantico(no->linha_declaracao, mensagem);
+        }
+    }
+}
+
+
+// ============================================================================
+// PARTE 11: GERADOR DE CÓDIGO MEPA
+// ============================================================================
+// Só escreve linhas em saida_mepa.txt. Quem decide O QUE gerar é o parser.
+// O buffer do 'passo' existe porque, no 'para', o incremento aparece antes
+// do corpo no fonte mas precisa sair depois dele na MEPA.
+// ============================================================================
+
+// ---- proximo_rotulo ----------------------------------------------------------
+/*
+ * Função recomendada pelo enunciado: devolve o próximo rótulo positivo (1, 2, 3...).
+ * ATENÇÃO: como o parser é recursivo, cada função pega os seus rótulos
+ * em variáveis locais NO INÍCIO, antes de chamar as funções internas.
+ */
+int proximo_rotulo(void) {
+    return ++contador_rotulos;
+}
+
+// ---- emite_linha -------------------------------------------------------------
+/*
+ * Ponto único de escrita: manda a linha para o arquivo MEPA ou, durante o
+ * 'passo' de um 'para', para o buffer que será escrito depois do corpo do laço.
+ */
+void emite_linha(const char *linha) {
+    if (gravando_passo) {
+        if (strlen(buffer_passo) + strlen(linha) + 2 >= TAM_BUFFER_PASSO) {
+            printf("Erro: expressao do 'passo' grande demais.\n");
+            exit(1);
+        }
+        strcat(buffer_passo, linha);
+        strcat(buffer_passo, "\n");
+    } else if (arquivo_mepa != NULL) {
+        fprintf(arquivo_mepa, "%s\n", linha);
+    }
+}
+
+// ---- gera_codigo -------------------------------------------------------------
+/*
+ * Escreve uma instrução no arquivo MEPA, ex.: "CRVL x", "SOMA", "CRCT 5".
+ * argumento == NULL para instruções sem argumento.
+ */
+void gera_codigo(const char *instrucao, const char *argumento) {
+    char linha[160];
+    if (argumento != NULL) {
+        snprintf(linha, sizeof(linha), "    %s %s", instrucao, argumento);
+    } else {
+        snprintf(linha, sizeof(linha), "    %s", instrucao);
+    }
+    emite_linha(linha);
+}
+
+// ---- gera_codigo_numero ------------------------------------------------------
+/* Versão de gera_codigo para argumentos numéricos (AMEM 3, DMEM 3) */
+void gera_codigo_numero(const char *instrucao, int numero) {
+    char argumento[20];
+    snprintf(argumento, sizeof(argumento), "%d", numero);
+    gera_codigo(instrucao, argumento);
+}
+
+// ---- gera_rotulo -------------------------------------------------------------
+/*
+ * Escreve a definição de um rótulo, ex.: "L3: NADA" (ou "L2: ENPR" na entrada de uma rotina).
+ */
+void gera_rotulo(int rotulo, const char *instrucao) {
+    char linha[40];
+    snprintf(linha, sizeof(linha), "L%d: %s", rotulo, instrucao);
+    emite_linha(linha);
+}
+
+// ---- gera_desvio -------------------------------------------------------------
+/*
+ * Escreve um desvio para um rótulo, ex.: "DSVF L3", "DSVS L1" ou "CHPR L2".
+ */
+void gera_desvio(const char *instrucao, int rotulo) {
+    char linha[40];
+    snprintf(linha, sizeof(linha), "    %s L%d", instrucao, rotulo);
+    emite_linha(linha);
 }
