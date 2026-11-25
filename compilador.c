@@ -10,12 +10,6 @@
  *   Gustavo Kiyoshi Ikeda        RA: 10439179
  *   Pedro Montarroyos de Pinho   RA: 10440213
  *
- * Uso de Inteligência Artificial (exigência do enunciado):
- *   A Fase 2 foi desenvolvida com auxílio do Claude (Anthropic): o esqueleto
- *   (estruturas e assinaturas das funções), a implementação da tabela de símbolos,
- *   das verificações semânticas [R1]-[R9] e da geração de código MEPA, e os
- *   comentários explicativos. O grupo revisou, testou e estudou o código gerado.
- *   A mesma declaração está no Readme.txt.
  *
  * Regras semânticas do enunciado (referenciadas nos comentários como [R1] ... [R9]):
  *   [R1] toda variável deve ser declarada antes de ser usada
@@ -59,11 +53,6 @@
  *   PARTE 9  Semântico (b): tabela de símbolos (pilha de escopos)
  *   PARTE 10 Semântico (c): as regras R1-R9
  *   PARTE 11 Gerador de código MEPA
- *
- * Quem chama quem:
- *   main -> PARSER (partes 6-7) --+--> LÉXICO     (partes 4-5)  'me dê o próximo token'
- *                                 +--> SEMÂNTICO  (partes 8-10) 'isto é permitido?'
- *                                 +--> GERADOR    (parte 11)    'escreva esta instrução'
  */
 
 
