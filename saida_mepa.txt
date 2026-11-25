@@ -1,0 +1,37 @@
+    INPP
+    DSVS L1
+L2: ENPR
+    ARMZ v
+    CRVL v
+    CRCT 2
+    MODI
+    CRCT 0
+    CMIG
+    DSVF L4
+    CRCT 1
+    ARMZ eh_par
+    DSVS L3
+    DSVS L5
+L4: NADA
+    CRCT 0
+    ARMZ eh_par
+    DSVS L3
+L5: NADA
+L3: NADA
+    RTPR
+L1: NADA
+    AMEM 1
+    CRCT 14
+    ARMZ num
+    CRCT "O número "
+    IMPR
+    CRVL num
+    IMPR
+    CRCT " é par? "
+    IMPR
+    CRVL num
+    CHPR L2
+    CRVL eh_par
+    IMPR
+    DMEM 1
+    PARA
