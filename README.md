@@ -64,15 +64,19 @@ main ──► PARSER (sintático) ──┬──► LÉXICO     "me dê o pró
 
 O `compilador.c` está dividido em etapas:
 
-| Etapa | Fase | Conteúdo | Funções principais |
+| Parte | Fase | Conteúdo | Funções principais |
 | --- | --- | --- | --- |
 | 1 | 1 e 2 | Estruturas de dados e variáveis globais | `Token`, `TipoDado`, `Categoria`, `TNo`, `TEscopo` |
-| 2 | 1 | Analisador léxico | `obterToken` |
-| 3 | 1 e 2 | Analisador sintático (descendente recursivo LL(1)) | `nextToken`, `consome*`, `analisa_*`, `avalia_*` |
-| 4 | 2 | Erros semânticos e conversão de tipos | `erro_semantico`, `lexema_para_tipo`, `tipo_para_texto`, `texto_para_tipo` |
-| 5 | 2 | Tabela de símbolos (pilha de tabelas por escopo) | `abre_escopo`, `fecha_escopo`, `insere_simbolo`, `busca_simbolo`, `busca_tabela_simbolos` |
-| 6 | 2 | Verificações semânticas | `verifica_operacao`, `verifica_atribuicao`, `verifica_argumentos`, `verifica_retorno`... |
-| 7 | 2 | Geração de código MEPA | `proximo_rotulo`, `gera_codigo`, `gera_rotulo`, `gera_desvio` |
+| 2 | — | Índice de funções (protótipos) | — |
+| 3 | 1 e 2 | Ponto de partida | `main` |
+| 4 | 1 | Analisador léxico | `obterToken` |
+| 5 | 1 | Ponte entre léxico e sintático | `nextToken`, `consome`, `consome_palavra`, `consome_tipo` |
+| 6 | 1 e 2 | Sintático: programa, declarações, sub-rotinas e comandos | `analisa_*`, `avalia_lista_comandos`, `avalia_comando_*` |
+| 7 | 1 e 2 | Sintático: expressões (onde os tipos são calculados) | `avalia_expressao`, `avalia_expressao_simples`, `avalia_termo`, `avalia_fator` |
+| 8 | 2 | Semântico: erros e conversão de tipos | `erro_semantico`, `lexema_para_tipo`, `tipo_para_texto`, `texto_para_tipo` |
+| 9 | 2 | Semântico: tabela de símbolos (pilha de escopos) | `abre_escopo`, `fecha_escopo`, `insere_simbolo`, `busca_simbolo`, `busca_tabela_simbolos` |
+| 10 | 2 | Semântico: regras R1–R9 | `verifica_operacao`, `verifica_atribuicao`, `verifica_argumentos`, `verifica_retorno`... |
+| 11 | 2 | Gerador de código MEPA | `proximo_rotulo`, `gera_codigo`, `gera_rotulo`, `gera_desvio` |
 
 ### Fase 1: léxico e sintático
 
